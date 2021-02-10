@@ -80,24 +80,25 @@ class ConstrainedLinear(torch.nn.Module):
 
 
 class AdmixtureAE(torch.nn.Module):
-    def __init__(self, k, num_features, beta_l0=2/3, gamma_l0=-0.1, zeta_l0=1.1, lambda_l0=0.1, P_init=None):
+    def __init__(self, k, num_features, beta_l0=2/3, gamma_l0=-0.1, zeta_l0=1.1, lambda_l0=0.1, P_init=None, deep_encoder=False):
         super().__init__()
         self.k = k
         self.num_features = num_features
         self.beta_l0, self.gamma_l0, self.zeta_l0 = beta_l0, gamma_l0, zeta_l0
         self.lambda_l0 = lambda_l0
+        self.deep_encoder = deep_encoder
         if lambda_l0 > 0:
             self.encoder = L0Linear(self.num_features, self.k, bias=True, beta=self.beta_l0, gamma=self.gamma_l0, zeta=self.zeta_l0)
         else:
-            self.encoder = nn.Linear(self.num_features, self.k, bias=True)
-            # self.encoder = nn.Sequential(
-            #        nn.Linear(self.num_features, 2048, bias=True),
-            #        nn.Linear(2048, 1024, bias=True),
-            #        nn.Linear(1024, 512, bias=True),
-            #        nn.Linear(512, 256, bias=True),
-            #        nn.Linear(256, 64, bias=True),
-            #        nn.Linear(64, self.k, bias=True)
-            # )
+            if not self.deep_encoder:
+                self.encoder = nn.Linear(self.num_features, self.k, bias=True)
+            else:
+                self.encoder = nn.Sequential(
+                        nn.Linear(self.num_features, 512, bias=True),
+                        nn.Linear(512, 128, bias=True),
+                        nn.Linear(128, 32, bias=True),
+                        nn.Linear(32, self.k, bias=True)
+                )
         self.decoder = ConstrainedLinear(self.k, num_features, hard_init=P_init, bias=False)
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax(dim=1)
@@ -112,22 +113,14 @@ class AdmixtureAE(torch.nn.Module):
         reconstruction = self.decoder(hid_state)
         return reconstruction, hid_state, l0_pen/X.shape[0]
         
-    def train(self, trX, optimizer, loss_f, num_epochs, device, batch_size=0, valX=None, display_logs=True, loss_weights=None, save_every=10, save_path=''):
+    def train(self, trX, optimizer, loss_f, num_epochs, device, batch_size=0, valX=None, display_logs=True, loss_weights=None, save_every=10, save_path='../outputs/model.pt'):
         for ep in range(num_epochs):
-            if display_logs:
-                print(f'------------- EPOCH {ep+1} -------------')
             tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, loss_weights)
-            if display_logs:
-                print(f'Mean training loss: {tr_loss}')
+            if display_logs and ep % 50 == 0:
+                print(f'EPOCH {ep+1}: mean training loss: {tr_loss}')
                 if val_loss is not None:
-                    print(f'Mean validation loss: {val_loss}')
+                    print(f'EPOCH {ep+1}: mean validation loss: {val_loss}')
             if save_every*ep > 0 and ep % save_every == 0:
-                save_path = '../outputs/JumpSNPs_init_meanrandom_K_{}_lambdal0_{}_CBCE_BS_{}epoch{}.pt'.format(
-                    self.k,
-                    self.lambda_l0,
-                    batch_size,
-                    ep+1
-                )
                 torch.save(self.state_dict(), save_path)
         return tr_loss, val_loss
 
