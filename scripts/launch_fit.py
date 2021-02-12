@@ -5,9 +5,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from custom_losses import WeightedBCE
+from custom_losses import MaskedBCE, WeightedBCE
 from sklearn.cluster import KMeans, MiniBatchKMeans
 from sklearn.model_selection import train_test_split
+import pickle
 
 def read_data(window_size=0):
     print('Reading data...')
@@ -26,30 +27,34 @@ def fit_model(dataset, args):
     gamma_l0 = args.gamma_l0
     lambda_l0 = args.lambda_l0
     num_max_epochs = args.epochs
-    batchsize_samples = args.bs
+    batch_size = args.bs
     learning_rate = args.lr
     window_size = args.window_size
     save_dir = args.save_dir
     deep_encoder = args.deep_encoder == 1
     decoder_init = args.decoder_init
     optimizer = args.optimizer
-    weight_loss = args.weight_loss
+    loss = args.loss
+    mask_frac = args.mask_frac
     save_every = args.save_every
     print('[INFO] Job args:', args)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    save_path = '{}/{}_Windowed_{}_init_{}_K_{}_lambdal0_{}_WBCE_BS_{}.pt'.format(
+    save_path = '{}/{}_Windowed_{}_init_{}_K_{}_lambdal0_{}_{}_frac_{}_BS_{}.pt'.format(
                     save_dir,
                     'Deep' if deep_encoder else 'Shallow',
                     window_size,
                     decoder_init,
                     K,
                     lambda_l0,
-                    batchsize_samples
+                    loss,
+                    mask_frac,
+                    batch_size
                 )
     print('[INFO] Initializing...')
     if decoder_init == 'mean_random':
         X_mean = torch.tensor(dataset.mean(axis=0)).unsqueeze(1)
         P_init = (torch.bernoulli(X_mean.repeat(1, K))-0.5).T.float()
+        del X_mean
     elif decoder_init == 'random':
         P_init = None
     elif decoder_init.startswith('kmeans'):
@@ -64,7 +69,7 @@ def fit_model(dataset, args):
         del k_means_obj
     elif decoder_init.startswith('minibatch_kmeans'):
         print('[INFO] Getting minibatch k-Means cluster centroids...')
-        k_means_obj = MiniBatchKMeans(n_clusters=K, batch_size=batchsize_samples, random_state=42).fit(dataset)
+        k_means_obj = MiniBatchKMeans(n_clusters=K, batch_size=batch_size, random_state=42).fit(dataset)
         if decoder_init.endswith('logit'):
             P_init = torch.logit(torch.tensor(k_means_obj.cluster_centers_).float(), eps=1e-8)
             del centr
@@ -76,14 +81,18 @@ def fit_model(dataset, args):
         optimizer = optim.Adam(ADM.parameters(), lr=learning_rate)
     elif optimizer == 'sgd':
         optimizer = optim.SGD(ADM.parameters(), lr=learning_rate)
-    if weight_loss > 0:
+    loss_weights = None
+    if loss == 'mse':
+        loss_f = nn.MSELoss()
+    elif loss == 'bce':
+        loss_f = nn.BCELoss()
+    elif loss == 'wbce':
         loss_f = WeightedBCE()
         loss_weights = torch.tensor(dataset.std(axis=0)).float().to(device)
-    else:
-        loss_f = nn.MSELoss()
-        loss_weights = None
+    elif loss == 'bce_mask':
+        loss_f = MaskedBCE(device, mask_frac=mask_frac)
     print('[INFO] Calling fit...')
-    ADM.train(dataset, optimizer, loss_f, num_max_epochs, device, batch_size=batchsize_samples, loss_weights=loss_weights, save_every=save_every, save_path=save_path)
+    ADM.train(dataset, optimizer, loss_f, num_max_epochs, device, batch_size=batch_size, loss_weights=loss_weights, save_every=save_every, save_path=save_path)
     torch.save(ADM.state_dict(), save_path)
     print('[INFO] Fit done.')
     return 0
@@ -99,7 +108,8 @@ def main():
     parser.add_argument('--beta_l0', required=False, type=float, default=0.01, help='L0 Beta parameter')
     parser.add_argument('--theta_l0', required=False, type=float, default=0.01, help='L0 Theta parameter')
     parser.add_argument('--decoder_init', required=True, type=str, choices=['random', 'mean_random', 'kmeans', 'kmeans_logit', 'minibatch_kmeans', 'minibatch_kmeans_logit'], help='Decoder initialization')
-    parser.add_argument('--weight_loss', required=True, type=int, choices=[0, 1], help='Weight loss per SNP variance')
+    parser.add_argument('--loss', required=True, type=str, choices=['mse', 'bce', 'wbce', 'bce_mask'], help='Loss function to train')
+    parser.add_argument('--mask_frac', required=False, type=float, help='%% of SNPs used in every step (only for masked BCE loss)')
     parser.add_argument('--optimizer', required=True, type=str, choices=['adam', 'sgd'], help='Optimizer')
     parser.add_argument('--save_every', required=True, type=int, help='Save every this number of epochs')
     parser.add_argument('--save_dir', required=True, type=str, help='Save model in this directory')
