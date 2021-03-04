@@ -130,3 +130,12 @@ dmypy.json
 
 # Data folder contents
 **/data/**
+
+# wandb
+**/wandb/**
+
+# logs
+logs/
+
+# outputs
+outputs/

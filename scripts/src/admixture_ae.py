@@ -1,7 +1,13 @@
+import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import os
+import wandb
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 class _L0Norm(nn.Module):
     def __init__(self, origin, loc_mean=0, loc_sdev=0.01, beta=2 / 3, gamma=-0.1,
@@ -55,11 +61,11 @@ class ConstrainedLinear(torch.nn.Module):
     def __init__ (self, input_size, output_size, hard_init=None, bias=True): 
         super().__init__()
         if hard_init is None:
-            print('[INFO] Random decoder initialization.')
+            log.info('Random decoder initialization.')
             self.W = nn.Parameter(torch.zeros(input_size, output_size)) 
             self.W = nn.init.kaiming_normal_(self.W)
         else:
-            print('[INFO] Hardcoded decoder initialization.')
+            log.info('Hardcoded decoder initialization.')
             try:
                 assert hard_init.size()[0] == input_size
                 assert hard_init.size()[1] == output_size
@@ -79,31 +85,40 @@ class ConstrainedLinear(torch.nn.Module):
         return torch.mm(x, torch.sigmoid(self.W)) 
 
 
-class AdmixtureAE(torch.nn.Module):
-    def __init__(self, k, num_features, beta_l0=2/3, gamma_l0=-0.1, zeta_l0=1.1, lambda_l0=0.1, P_init=None, deep_encoder=False):
+class AdmixtureAE(nn.Module):
+    def __init__(self, k, num_features, beta_l0=2/3, gamma_l0=-0.1, zeta_l0=1.1, lambda_l0=0.1, P_init=None, deep_encoder=False, batch_norm=False, lambda_l2=0, dropout=0):
         super().__init__()
         self.k = k
         self.num_features = num_features
         self.beta_l0, self.gamma_l0, self.zeta_l0 = beta_l0, gamma_l0, zeta_l0
         self.lambda_l0 = lambda_l0
+        self.lambda_l2 = lambda_l2
         self.deep_encoder = deep_encoder
+        self.batch_norm = nn.BatchNorm1d(num_features) if batch_norm else None
         if lambda_l0 > 0:
             self.encoder = L0Linear(self.num_features, self.k, bias=True, beta=self.beta_l0, gamma=self.gamma_l0, zeta=self.zeta_l0)
+        self.dropout = nn.Dropout(dropout) if dropout > 0 else None
+        if not self.deep_encoder:
+            self.encoder = nn.Linear(self.num_features, self.k, bias=True)
         else:
-            if not self.deep_encoder:
-                self.encoder = nn.Linear(self.num_features, self.k, bias=True)
-            else:
-                self.encoder = nn.Sequential(
-                        nn.Linear(self.num_features, 512, bias=True),
-                        nn.Linear(512, 128, bias=True),
-                        nn.Linear(128, 32, bias=True),
-                        nn.Linear(32, self.k, bias=True)
-                )
+            self.encoder = nn.Sequential(
+                    nn.Linear(self.num_features, 512, bias=True),
+                    nn.Linear(512, 128, bias=True),
+                    nn.Linear(128, 32, bias=True),
+                    nn.Linear(32, self.k, bias=True)
+            )
         self.decoder = ConstrainedLinear(self.k, num_features, hard_init=P_init, bias=False)
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax(dim=1)
 
+    def _get_encoder_norm(self):
+        return torch.norm(list(self.encoder.parameters())[0])
+
     def forward(self, X):
+        if self.batch_norm is not None:
+            X = self.batch_norm(X)
+        if self.dropout is not None:
+            X = self.dropout(X)
         if self.lambda_l0 > 0:
             enc, l0_pen = self.encoder(X)
         else:
@@ -113,16 +128,27 @@ class AdmixtureAE(torch.nn.Module):
         reconstruction = self.decoder(hid_state)
         return reconstruction, hid_state, l0_pen/X.shape[0]
         
-    def train(self, trX, optimizer, loss_f, num_epochs, device, batch_size=0, valX=None, display_logs=True, loss_weights=None, save_every=10, save_path='../outputs/model.pt'):
+    def launch_training(self, trX, optimizer, loss_f, num_epochs, device, batch_size=0, valX=None, display_logs=True, loss_weights=None, save_every=10, save_path='../outputs/model.pt', run_name=None):
         for ep in range(num_epochs):
             tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, loss_weights)
-            if display_logs and ep % 50 == 0:
-                print(f'EPOCH {ep+1}: mean training loss: {tr_loss}')
+            if run_name is not None and val_loss is not None:
+                wandb.log({"tr_loss": tr_loss, "val_loss": val_loss})
+            elif run_name is not None:
+                wandb.log({"tr_loss": tr_loss})
+            try:
+                assert not math.isnan(tr_loss)
+            except AssertionError as ae:
+                ae.args += ('Training loss is NaN',)
+                raise ae
+            except Exception as e:
+                raise e
+            if display_logs and ep % 10 == 0:
+                log.info(f'[METRICS] EPOCH {ep+1}: mean training loss: {tr_loss}')
                 if val_loss is not None:
-                    print(f'EPOCH {ep+1}: mean validation loss: {val_loss}')
+                    log.info(f'[METRICS] EPOCH {ep+1}: mean validation loss: {val_loss}')
             if save_every*ep > 0 and ep % save_every == 0:
                 torch.save(self.state_dict(), save_path)
-        return tr_loss, val_loss
+        return ep+1
 
     def _batch_generator(self, X, batch_size=0):
         if batch_size < 1:
@@ -135,7 +161,8 @@ class AdmixtureAE(torch.nn.Module):
         acum_val_loss = 0
         with torch.no_grad():
             for X in self._batch_generator(valX, batch_size):
-                rec, _, _ = self.forward(X.to(device))
+                X = X.to(device)
+                rec, _, _ = self.forward(X)
                 acum_val_loss += loss_f(rec, X).cpu().item()
         return acum_val_loss
 
@@ -147,18 +174,22 @@ class AdmixtureAE(torch.nn.Module):
             loss = loss_f(rec, X, loss_weights)
         else:
             loss = loss_f(rec, X)
-        if self.lambda_l0 > 0:
+        if self.lambda_l0 > 1e-6:
             loss += self.lambda_l0*l0_pen
+        if self.lambda_l2 > 1e-6:
+            loss += self.lambda_l2*self._get_encoder_norm()**2
         loss.backward()
         optimizer.step()
         return loss
 
     def _run_epoch(self, trX, optimizer, loss_f, batch_size, valX, device, loss_weights=None):
         tr_loss, val_loss = 0, None
+        self.train()
         for X in self._batch_generator(trX, batch_size):
             step_loss = self._run_step(X.to(device), optimizer, loss_f, loss_weights)
             tr_loss += step_loss.cpu().item()
         if valX is not None:
-            val_loss = self._validate(valX, loss_f, device)
+            self.eval()
+            val_loss = self._validate(valX, loss_f, batch_size, device)
             return tr_loss / trX.shape[0], val_loss / valX.shape[0]
         return tr_loss / trX.shape[0], None
