@@ -1,5 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
+import wandb
 
 def stacked_bar(data, series_labels, category_labels=None, 
                 show_values=False, value_format="{}", y_label=None, 
@@ -64,3 +66,44 @@ def stacked_bar(data, series_labels, category_labels=None,
                          value_format.format(h), ha="center", 
                          va="center")
     plt.xlim((0, data.shape[1]))
+
+
+def generate_plots(model, trX, trY, valX, valY, device, batch_size, k):
+    model.eval()
+    with torch.no_grad():
+        tr_outs = []
+        for x in model._batch_generator(trX, batch_size):
+            tr_outs.append(model(x.to(device))[1])
+        tr_outputs = torch.vstack(tr_outs).detach().cpu().numpy()
+        del tr_outs
+        val_outs = []
+        for x in model._batch_generator(valX, batch_size):
+            val_outs.append(model(x.to(device))[1])
+        val_outputs = torch.vstack(val_outs).detach().cpu().numpy()
+        del val_outs
+    ancestries = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS'] if k == 7\
+                                                                   else [str(i) for i in range(k)]
+    log.info('Rendering training barplot...')
+    plt.figure(figsize=(20,6))
+    plt.subplots_adjust(wspace=0, hspace=0)
+    for k_idx in range(k):
+        if k_idx == 0:
+            ax1 = plt.subplot(1,k,k_idx+1)
+        else:
+            plt.subplot(1,k,k_idx+1, sharey=ax1)
+        labels_plot = [str(i) for i in range(k)]
+        plots.stacked_bar(tr_outputs.T[:, np.array(trY) == k_idx], labels_plot, legend=k_idx == k-1)
+        plt.title(ancestries[k_idx])
+    wandb.log({"Training results": wandb.Image(plt)})
+    log.info('Rendering validation barplot...')
+    plt.figure(figsize=(20,6))
+    plt.subplots_adjust(wspace=0, hspace=0)
+    for k_idx in range(k):
+        if k_idx == 0:
+            ax1 = plt.subplot(1,k,k_idx+1)
+        else:
+            plt.subplot(1,k,k_idx+1, sharey=ax1)
+        plots.stacked_bar(val_outputs.T[:, np.array(valY) == k_idx], labels_plot, legend=k_idx == k-1)
+        plt.title(ancestries[k_idx])
+    wandb.log({"Validation results": wandb.Image(plt)})
+    return 0
