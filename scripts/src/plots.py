@@ -1,7 +1,11 @@
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import wandb
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 def stacked_bar(data, series_labels, category_labels=None, 
                 show_values=False, value_format="{}", y_label=None, 
