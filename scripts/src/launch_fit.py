@@ -23,8 +23,8 @@ os.environ['WANDB_SILENT'] = 'true'
 
 def read_data(window_size=0):
     log.info('Reading data...')
-    f_tr = h5py.File(f'/home/usuaris/imatge/albert.dominguez/data/chr22/prepared/train{window_size}.h5', 'r')
-    f_val = h5py.File(f'/home/usuaris/imatge/albert.dominguez/data/chr22/prepared/valid{window_size}.h5', 'r')
+    f_tr = h5py.File(f'/home/usuaris/imatge/albert.dominguez/neural-admixture/data/chr22/prepared/train{window_size}.h5', 'r')
+    f_val = h5py.File(f'/home/usuaris/imatge/albert.dominguez/neural-admixture/data/chr22/prepared/valid{window_size}.h5', 'r')
     return f_tr['snps'], f_tr['populations'], f_val['snps'], f_val['populations']
 
 
