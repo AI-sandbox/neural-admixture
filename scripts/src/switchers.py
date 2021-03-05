@@ -9,8 +9,8 @@ class Switchers(object):
         'tanh': lambda device, frac: nn.Tanh()
     }
     _losses = {
-        'mse': lambda device, frac: nn.MSELoss(reduction='sum'),
-        'bce': lambda device, frac: nn.BCELoss(reduction='sum'),
+        'mse': lambda device, frac: nn.MSELoss(reduction='mean'),
+        'bce': lambda device, frac: nn.BCELoss(reduction='mean'),
         'wbce': lambda device, frac: WeightedBCE(),
         'bce_mask': lambda device, frac: MaskedBCE(device, mask_frac=frac),
         'mse_mask': lambda device, frac: MaskedMSE(device, mask_frac=frac) 
