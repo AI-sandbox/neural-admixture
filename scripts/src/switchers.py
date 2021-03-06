@@ -11,9 +11,9 @@ class Switchers(object):
     _losses = {
         'mse': lambda device, frac: nn.MSELoss(reduction='mean'),
         'bce': lambda device, frac: nn.BCELoss(reduction='mean'),
-        'wbce': lambda device, frac: WeightedBCE(),
-        'bce_mask': lambda device, frac: MaskedBCE(device, mask_frac=frac),
-        'mse_mask': lambda device, frac: MaskedMSE(device, mask_frac=frac) 
+        'wbce': lambda device, frac: cl.WeightedBCE(),
+        'bce_mask': lambda device, frac: cl.MaskedBCE(device, mask_frac=frac),
+        'mse_mask': lambda device, frac: cl.MaskedMSE(device, mask_frac=frac) 
     }
     _initializations = {
         'random': lambda X, k, batch_size, seed: None,

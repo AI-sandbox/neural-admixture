@@ -128,7 +128,7 @@ class AdmixtureAE(nn.Module):
             for X in self._batch_generator(valX, batch_size):
                 X = X.to(device)
                 rec, _ = self.forward(X)
-                acum_val_loss += loss_f(rec, X).cpu().item()
+                acum_val_loss += loss_f(rec, X).item()
         return acum_val_loss
 
         
@@ -150,7 +150,7 @@ class AdmixtureAE(nn.Module):
         self.train()
         for X in self._batch_generator(trX, batch_size):
             step_loss = self._run_step(X.to(device), optimizer, loss_f, loss_weights)
-            tr_loss += step_loss.cpu().item()
+            tr_loss += step_loss.item()
         if valX is not None:
             self.eval()
             val_loss = self._validate(valX, loss_f, batch_size, device)
