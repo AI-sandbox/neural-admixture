@@ -1,4 +1,5 @@
 import argparse
+import h5py
 import logging
 import os
 import wandb
@@ -27,6 +28,9 @@ def parse_args():
     parser.add_argument('--activation', required=True, type=str, choices=['relu', 'tanh'], help='Activation function for deep encoder layers')
     parser.add_argument('--wandb_log', required=True, type=int, choices=[0, 1], help='Whether to log to wandb or not')
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
+    parser.add_argument('--multihead', required=False, type=int, default=0, choices=[0,1], help='Whether to train multihead admixture')
+    parser.add_argument('--min_k', required=False, type=int, default=3, choices=range(3,10), help='Minimum number of clusters for multihead admixture')
+    parser.add_argument('--max_k', required=False, type=int, default=10, choices=range(4,11), help='Maximum number of clusters for multihead admixture')
     return parser.parse_args()
 
 def initialize_wandb(should_init, trX, valX, args, silent=True):
@@ -44,3 +48,9 @@ def initialize_wandb(should_init, trX, valX, args, silent=True):
             )
     wandb.config.update({'train_samples': len(trX), 'val_samples': len(valX)})
     return run_name
+
+def read_data(window_size='0'):
+    log.info('Reading data...')
+    f_tr = h5py.File(f'/home/usuaris/imatge/albert.dominguez/neural-admixture/data/chr22/prepared/train{window_size}.h5', 'r')
+    f_val = h5py.File(f'/home/usuaris/imatge/albert.dominguez/neural-admixture/data/chr22/prepared/valid{window_size}.h5', 'r')
+    return f_tr['snps'], f_tr['populations'], f_val['snps'], f_val['populations']

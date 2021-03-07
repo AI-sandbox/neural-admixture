@@ -72,17 +72,25 @@ def stacked_bar(data, series_labels, category_labels=None,
     plt.xlim((0, data.shape[1]))
 
 
-def generate_plots(model, trX, trY, valX, valY, device, batch_size, k):
+def generate_plots(model, trX, trY, valX, valY, device,
+                   batch_size, k=7, is_multihead=False,
+                   min_k=3, max_k=10):
     model.eval()
     with torch.no_grad():
         tr_outs = []
         for x in model._batch_generator(trX, batch_size):
-            tr_outs.append(model(x.to(device))[1])
+            if not is_multihead:
+                tr_outs.append(model(x.to(device))[1])
+            else:
+                tr_outs.append(model(x.to(device))[1][k-min_k])
         tr_outputs = torch.vstack(tr_outs).detach().cpu().numpy()
         del tr_outs
         val_outs = []
         for x in model._batch_generator(valX, batch_size):
-            val_outs.append(model(x.to(device))[1])
+            if not is_multihead:
+                val_outs.append(model(x.to(device))[1])
+            else:
+                val_outs.append(model(x.to(device))[1][k-min_k])
         val_outputs = torch.vstack(val_outs).detach().cpu().numpy()
         del val_outs
     ancestries = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS'] if k == 7\

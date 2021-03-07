@@ -5,8 +5,8 @@ import torch.optim as optim
 
 class Switchers(object):
     _activations = {
-        'relu': lambda device, frac: nn.ReLU(),
-        'tanh': lambda device, frac: nn.Tanh()
+        'relu': lambda x: nn.ReLU(),
+        'tanh': lambda x: nn.Tanh()
     }
     _losses = {
         'mse': lambda device, frac: nn.MSELoss(reduction='mean'),

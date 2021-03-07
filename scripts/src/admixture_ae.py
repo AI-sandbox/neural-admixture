@@ -44,7 +44,9 @@ class Projector(nn.Module):
         pass
 
 class AdmixtureAE(nn.Module):
-    def __init__(self, k, num_features, encoder_activation=nn.ReLU(), P_init=None, deep_encoder=False, batch_norm=False, lambda_l2=0, dropout=0):
+    def __init__(self, k, num_features, encoder_activation=nn.ReLU(),
+                 P_init=None, deep_encoder=False, batch_norm=False,
+                 lambda_l2=0, dropout=0):
         super().__init__()
         self.k = k
         self.num_features = num_features
@@ -69,12 +71,6 @@ class AdmixtureAE(nn.Module):
             self.encoder = nn.Sequential(
                     nn.Linear(self.num_features, 512, bias=True),
                     self.encoder_activation,
-                    #nn.Linear(512, 128, bias=False),
-                    #nn.BatchNorm1d(128),
-                    #self.encoder_activation,
-                    #nn.Linear(128, 32, bias=False),
-                    #nn.BatchNorm1d(32),
-                    #self.encoder_activation,
                     nn.Linear(512, self.k, bias=True)
             )
         self.decoder = ConstrainedLinear(self.k, num_features, hard_init=P_init, bias=False)
