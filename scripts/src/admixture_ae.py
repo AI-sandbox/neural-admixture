@@ -37,6 +37,12 @@ class ConstrainedLinear(torch.nn.Module):
         return torch.mm(x, torch.sigmoid(self.W)) 
 
 
+class Projector(nn.Module):
+    def __init__(self):
+        pass
+    def forward(self, x):
+        pass
+
 class AdmixtureAE(nn.Module):
     def __init__(self, k, num_features, encoder_activation=nn.ReLU(), P_init=None, deep_encoder=False, batch_norm=False, lambda_l2=0, dropout=0):
         super().__init__()
@@ -61,16 +67,15 @@ class AdmixtureAE(nn.Module):
             )
         else:
             self.encoder = nn.Sequential(
-                    nn.Linear(self.num_features, 512, bias=False),
-                    nn.BatchNorm1d(512),
+                    nn.Linear(self.num_features, 512, bias=True),
                     self.encoder_activation,
-                    nn.Linear(512, 128, bias=False),
-                    nn.BatchNorm1d(128),
-                    self.encoder_activation,
-                    nn.Linear(128, 32, bias=False),
-                    nn.BatchNorm1d(32),
-                    self.encoder_activation,
-                    nn.Linear(32, self.k, bias=True)
+                    #nn.Linear(512, 128, bias=False),
+                    #nn.BatchNorm1d(128),
+                    #self.encoder_activation,
+                    #nn.Linear(128, 32, bias=False),
+                    #nn.BatchNorm1d(32),
+                    #self.encoder_activation,
+                    nn.Linear(512, self.k, bias=True)
             )
         self.decoder = ConstrainedLinear(self.k, num_features, hard_init=P_init, bias=False)
         self.sigmoid = nn.Sigmoid()

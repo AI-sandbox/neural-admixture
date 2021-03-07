@@ -1,4 +1,5 @@
 import logging
+import numpy as np
 import torch
 from sklearn.cluster import KMeans, MiniBatchKMeans
 
@@ -27,7 +28,13 @@ class KMeansInitialization(object):
 
 class RandomMeanInitialization(object):
     @classmethod
-    def get_decoder_init(cls, X):
+    def get_decoder_init(cls, X, K):
         X_mean = torch.tensor(np.mean(X, axis=0)).unsqueeze(1)
         P_init = (torch.bernoulli(X_mean.repeat(1, K))-0.5).T.float()
         return P_init
+
+class SNPsMeanInitialization(object):
+    @classmethod
+    def get_decoder_init(cls, X, K):
+        X_mean = torch.tensor(np.mean(X, axis=0), dtype=torch.float)
+        return X_mean.repeat(K, 1)
