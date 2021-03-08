@@ -28,6 +28,31 @@ class MultiHeadEncoder(nn.Module):
         return outputs
 
 
+class MultiHeadDecoder(nn.Module):
+    def __init__(self, ks, output_size, bias=False, inits=None):
+        super().__init__()
+        self.ks = ks
+        if inits is None:
+            self.decoders = nn.ModuleList(
+                [ConstrainedLinear(k, output_size, hard_init=inits, bias=bias) for k in self.ks]
+            )
+        else:
+            layers = [None]*len(self.ks)
+            for i in range(len(ks)):
+                ini = end if i != 0 else 0
+                end = ini+self.ks[i]
+                layers[i] = ConstrainedLinear(self.ks[i], output_size, hard_init=inits[ini:end], bias=bias)            
+            self.decoders = nn.ModuleList(layers)
+        assert len(self.decoders) == len(self.ks)
+
+    def _get_decoder_for_k(self, k):
+        return self.decoders[k-min(self.ks)]
+
+    def forward(self, hid_states):
+        outputs = [self._get_decoder_for_k(self.ks[i])(hid_states[i]) for i in range(len(self.ks))]
+        return outputs
+
+
 class AdmixtureMultiHead(AdmixtureAE):
     def __init__(self, ks, num_features, encoder_activation=nn.ReLU(),
                  P_init=None, batch_norm=False,
@@ -43,13 +68,11 @@ class AdmixtureMultiHead(AdmixtureAE):
                 nn.Linear(self.num_features, 512, bias=True),
                 self.encoder_activation,
         )
-        self.multihead_encoder = MultiHeadEncoder(512, ks)
-        self.decoder = ConstrainedLinear(sum(self.ks), num_features, hard_init=P_init, bias=False)
-        self.sigmoid = nn.Sigmoid()
-        self.softmax = nn.Softmax(dim=1)
+        self.multihead_encoder = MultiHeadEncoder(512, self.ks)
+        self.decoders = MultiHeadDecoder(self.ks, num_features, bias=False, inits=P_init)
 
     def _get_encoder_norm(self):
-        return sum((torch.norm(p) for p in list(self.encoder.parameters())[::2]))
+        return torch.norm(list(self.common_encoder.parameters())[0])
 
     def forward(self, X):
         if self.batch_norm is not None:
@@ -58,6 +81,29 @@ class AdmixtureMultiHead(AdmixtureAE):
             X = self.dropout(X)
         enc = self.common_encoder(X)
         hid_states = self.multihead_encoder(enc)
-        merged_states = self.softmax(torch.cat(hid_states, dim=1))
-        reconstruction = self.decoder(merged_states)
-        return reconstruction, hid_states
+        reconstructions = self.decoders(hid_states)
+        return reconstructions, hid_states
+
+    def _run_step(self, X, optimizer, loss_f, loss_weights=None):
+        optimizer.zero_grad()
+        recs, _ = self.forward(X)
+        if loss_weights is not None:
+            loss = sum((loss_f(rec, X, loss_weights) for rec in recs))
+        else:
+            loss = sum((loss_f(rec, X) for rec in recs))
+        if self.lambda_l2 > 1e-6:
+            loss += self.lambda_l2*self._get_encoder_norm()**2
+        loss.backward()
+        optimizer.step()
+        return loss
+    
+    def _validate(self, valX, loss_f, batch_size, device):
+        acum_val_loss = 0
+        with torch.no_grad():
+            for X in self._batch_generator(valX, batch_size):
+                X = X.to(device)
+                recs, _ = self.forward(X)
+                acum_val_loss += sum((loss_f(rec, X) for rec in recs)).item()
+            if self.lambda_l2 > 1e-6:
+                acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2
+        return acum_val_loss

@@ -74,7 +74,7 @@ def stacked_bar(data, series_labels, category_labels=None,
 
 def generate_plots(model, trX, trY, valX, valY, device,
                    batch_size, k=7, is_multihead=False,
-                   min_k=3, max_k=10):
+                   min_k=3, max_k=10, to_wandb=True):
     model.eval()
     with torch.no_grad():
         tr_outs = []
@@ -93,8 +93,7 @@ def generate_plots(model, trX, trY, valX, valY, device,
                 val_outs.append(model(x.to(device))[1][k-min_k])
         val_outputs = torch.vstack(val_outs).detach().cpu().numpy()
         del val_outs
-    ancestries = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS'] if k == 7\
-                                                                   else [str(i) for i in range(k)]
+    ancestries = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS']
     log.info('Rendering training barplot...')
     plt.figure(figsize=(20,6))
     plt.subplots_adjust(wspace=0, hspace=0)
@@ -106,7 +105,8 @@ def generate_plots(model, trX, trY, valX, valY, device,
         labels_plot = [str(i) for i in range(k)]
         stacked_bar(tr_outputs.T[:, np.array(trY) == k_idx], labels_plot, legend=k_idx == k-1)
         plt.title(ancestries[k_idx])
-    wandb.log({"Training results": wandb.Image(plt)})
+    if to_wandb:
+        wandb.log({"Training results": wandb.Image(plt)})
     log.info('Rendering validation barplot...')
     plt.figure(figsize=(20,6))
     plt.subplots_adjust(wspace=0, hspace=0)
@@ -117,5 +117,6 @@ def generate_plots(model, trX, trY, valX, valY, device,
             plt.subplot(1,k,k_idx+1, sharey=ax1)
         stacked_bar(val_outputs.T[:, np.array(valY) == k_idx], labels_plot, legend=k_idx == k-1)
         plt.title(ancestries[k_idx])
-    wandb.log({"Validation results": wandb.Image(plt)})
+    if to_wandb:
+        wandb.log({"Validation results": wandb.Image(plt)})
     return 0

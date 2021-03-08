@@ -130,6 +130,8 @@ class AdmixtureAE(nn.Module):
                 X = X.to(device)
                 rec, _ = self.forward(X)
                 acum_val_loss += loss_f(rec, X).item()
+            if self.lambda_l2 > 1e-6:
+                acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2
         return acum_val_loss
 
         
