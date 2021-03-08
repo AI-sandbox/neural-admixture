@@ -99,24 +99,29 @@ def generate_plots(model, trX, trY, valX, valY, device,
     plt.subplots_adjust(wspace=0, hspace=0)
     for k_idx in range(len(ancestries)):
         if k_idx == 0:
-            ax1 = plt.subplot(1,k,k_idx+1)
+            ax1 = plt.subplot(1,len(ancestries),k_idx+1)
         else:
-            plt.subplot(1,k,k_idx+1, sharey=ax1)
+            plt.subplot(1,len(ancestries),k_idx+1, sharey=ax1)
         labels_plot = [str(i) for i in range(k)]
-        stacked_bar(tr_outputs.T[:, np.array(trY) == k_idx], labels_plot, legend=k_idx == k-1)
+        stacked_bar(tr_outputs.T[:, np.array(trY) == k_idx], labels_plot, legend=k_idx == len(ancestries)-1)
         plt.title(ancestries[k_idx])
     if to_wandb:
         wandb.log({"Training results": wandb.Image(plt)})
+    else:
+        plt.show()
     log.info('Rendering validation barplot...')
     plt.figure(figsize=(20,6))
     plt.subplots_adjust(wspace=0, hspace=0)
     for k_idx in range(len(ancestries)):
         if k_idx == 0:
-            ax1 = plt.subplot(1,k,k_idx+1)
+            ax1 = plt.subplot(1,len(ancestries),k_idx+1)
         else:
-            plt.subplot(1,k,k_idx+1, sharey=ax1)
-        stacked_bar(val_outputs.T[:, np.array(valY) == k_idx], labels_plot, legend=k_idx == k-1)
+            plt.subplot(1,len(ancestries),k_idx+1, sharey=ax1)
+        stacked_bar(val_outputs.T[:, np.array(valY) == k_idx], labels_plot, legend=k_idx == len(ancestries)-1)
         plt.title(ancestries[k_idx])
     if to_wandb:
         wandb.log({"Validation results": wandb.Image(plt)})
+    else:
+        plt.show()
+    log.info('Done!')
     return 0
