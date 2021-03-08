@@ -97,7 +97,7 @@ def generate_plots(model, trX, trY, valX, valY, device,
     log.info('Rendering training barplot...')
     plt.figure(figsize=(20,6))
     plt.subplots_adjust(wspace=0, hspace=0)
-    for k_idx in range(k):
+    for k_idx in range(len(ancestries)):
         if k_idx == 0:
             ax1 = plt.subplot(1,k,k_idx+1)
         else:
@@ -110,7 +110,7 @@ def generate_plots(model, trX, trY, valX, valY, device,
     log.info('Rendering validation barplot...')
     plt.figure(figsize=(20,6))
     plt.subplots_adjust(wspace=0, hspace=0)
-    for k_idx in range(k):
+    for k_idx in range(len(ancestries)):
         if k_idx == 0:
             ax1 = plt.subplot(1,k,k_idx+1)
         else:

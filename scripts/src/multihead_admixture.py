@@ -55,13 +55,14 @@ class MultiHeadDecoder(nn.Module):
 
 class AdmixtureMultiHead(AdmixtureAE):
     def __init__(self, ks, num_features, encoder_activation=nn.ReLU(),
-                 P_init=None, batch_norm=False,
+                 P_init=None, batch_norm=False, batch_norm_hidden=False,
                  lambda_l2=0, dropout=0):
         super().__init__(ks[0], num_features)
         self.ks = ks
         self.num_features = num_features
         self.encoder_activation = encoder_activation
         self.batch_norm = nn.BatchNorm1d(num_features) if batch_norm else None
+        self.batch_norm_hidden = nn.BatchNorm1d(512) if batch_norm_hidden else None
         self.dropout = nn.Dropout(dropout) if dropout > 0 else None
         self.lambda_l2 = lambda_l2 if lambda_l2 > 1e-6 else 0
         self.common_encoder = nn.Sequential(
@@ -80,6 +81,8 @@ class AdmixtureMultiHead(AdmixtureAE):
         if self.dropout is not None:
             X = self.dropout(X)
         enc = self.common_encoder(X)
+        if self.batch_norm_hidden is not None:
+            enc = self.batch_norm_hidden(enc)
         hid_states = self.multihead_encoder(enc)
         reconstructions = self.decoders(hid_states)
         return reconstructions, hid_states
