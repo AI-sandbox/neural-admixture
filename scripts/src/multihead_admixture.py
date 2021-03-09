@@ -89,7 +89,7 @@ class AdmixtureMultiHead(AdmixtureAE):
 
     def _run_step(self, X, optimizer, loss_f, loss_weights=None):
         optimizer.zero_grad()
-        recs, _ = self.forward(X)
+        recs, _ = self(X)
         if loss_weights is not None:
             loss = sum((loss_f(rec, X, loss_weights) for rec in recs))
         else:
@@ -105,7 +105,7 @@ class AdmixtureMultiHead(AdmixtureAE):
         with torch.no_grad():
             for X in self._batch_generator(valX, batch_size):
                 X = X.to(device)
-                recs, _ = self.forward(X)
+                recs, _ = self(X)
                 acum_val_loss += sum((loss_f(rec, X) for rec in recs)).item()
             if self.lambda_l2 > 1e-6:
                 acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2

@@ -128,7 +128,7 @@ class AdmixtureAE(nn.Module):
         with torch.no_grad():
             for X in self._batch_generator(valX, batch_size):
                 X = X.to(device)
-                rec, _ = self.forward(X)
+                rec, _ = self(X)
                 acum_val_loss += loss_f(rec, X).item()
             if self.lambda_l2 > 1e-6:
                 acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2
@@ -137,7 +137,7 @@ class AdmixtureAE(nn.Module):
         
     def _run_step(self, X, optimizer, loss_f, loss_weights=None):
         optimizer.zero_grad()
-        rec, _ = self.forward(X)
+        rec, _ = self(X)
         if loss_weights is not None:
             loss = loss_f(rec, X, loss_weights)
         else:
