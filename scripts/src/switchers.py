@@ -22,7 +22,10 @@ class Switchers(object):
         'kmeans': lambda X, k, batch_size, seed: init.KMeansInitialization.get_decoder_init(X, k, False, False, batch_size, seed),
         'minibatch_kmeans': lambda X, k, batch_size, seed: init.KMeansInitialization.get_decoder_init(X, k, True, False, batch_size, seed),
         'kmeans_logit': lambda X, k, batch_size, seed: init.KMeansInitialization.get_decoder_init(X, k, False, True, batch_size, seed),
-        'minibatch_kmeans_logit': lambda X, k, batch_size, seed: init.KMeansInitialization.get_decoder_init(X, k, True, True, batch_size, seed)
+        'minibatch_kmeans_logit': lambda X, k, batch_size, seed: init.KMeansInitialization.get_decoder_init(X, k, True, True, batch_size, seed),
+        'torch_kmeans': lambda X, k, batch_size, seed: init.KMeansInitializationTorch.get_decoder_init(X, k, False),
+        'torch_kmeans_logit': lambda X, k, batch_size, seed: init.KMeansInitializationTorch.get_decoder_init(X, k, True)
+    
     }
     _optimizers = {
         'adam': lambda params, lr: optim.Adam(params, lr),

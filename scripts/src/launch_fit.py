@@ -5,10 +5,12 @@ import numpy as np
 import plots
 import torch
 import utils
+import uuid
 import wandb
 from admixture_ae import AdmixtureAE
 from multihead_admixture import AdmixtureMultiHead
 from codetiming import Timer
+from parallel import CustomDataParallel
 from switchers import Switchers
 
 logging.basicConfig(level=logging.INFO)
@@ -39,24 +41,10 @@ def fit_model(trX, valX, args):
     display_logs = bool(args.display_logs)
     log_to_wandb = bool(args.wandb_log)
     log.info(f'Job args: {args}')
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    save_path = '{}/{}_{}_init_{}_K_{}_{}_frac_{}_BS_{}_l2_{}_BN_{}_drpt_{}_{}_multihead_{}.pt'.format(
-                    save_dir,
-                    'Deep' if deep_encoder else 'Shallow',
-                    window_size,
-                    decoder_init,
-                    K,
-                    loss,
-                    mask_frac,
-                    batch_size,
-                    l2_penalty,
-                    batch_norm,
-                    dropout,
-                    activation_str,
-                    multihead
-                )
-    
-    run_name = utils.initialize_wandb(log_to_wandb, trX, valX, args)
+    log.info('Using {} GPU(s)'.format(torch.cuda.device_count()) if torch.cuda.is_available() else 'No GPUs available.')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    save_path = '{}/{}.pt'.format(save_dir, uuid.uuid4().hex)
+    run_name = utils.initialize_wandb(log_to_wandb, trX, valX, args, save_path)
     torch.manual_seed(seed)
     # Initialization
     log.info('Initializing...')
@@ -66,13 +54,16 @@ def fit_model(trX, valX, args):
         model = AdmixtureAE(K, trX.shape[1], P_init=P_init,
                         deep_encoder=deep_encoder, batch_norm=bool(batch_norm),
                         lambda_l2=l2_penalty, encoder_activation=activation,
-                        dropout=dropout).to(device)
+                        dropout=dropout)
     else:
         model = AdmixtureMultiHead(Ks, trX.shape[1], P_init=P_init,
                                    batch_norm=bool(batch_norm),
                                    lambda_l2=l2_penalty,
                                    encoder_activation=activation,
-                                   dropout=dropout).to(device)
+                                   dropout=dropout)
+    if torch.cuda.device_count() > 1:
+        model = CustomDataParallel(model)
+    model.to(device)
     if log_to_wandb:
         wandb.watch(model)
     

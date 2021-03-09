@@ -93,7 +93,7 @@ def generate_plots(model, trX, trY, valX, valY, device,
                 val_outs.append(model(x.to(device))[1][k-min_k])
         val_outputs = torch.vstack(val_outs).detach().cpu().numpy()
         del val_outs
-    ancestries = ['EUR', 'EAS', 'AMR', 'SAS', 'AFR', 'OCE', 'WAS']
+    ancestries = ['AFR', 'AMR', 'EAS', 'EUR', 'OCE', 'SAS', 'WAS']
     log.info('Rendering training barplot...')
     plt.figure(figsize=(20,6))
     plt.subplots_adjust(wspace=0, hspace=0)

@@ -3,7 +3,6 @@ import h5py
 import logging
 import os
 import wandb
-from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -13,7 +12,7 @@ def parse_args():
     parser.add_argument('--batch_size', required=True, type=int, help='Batch size')
     parser.add_argument('--k', required=True, type=int, help='Number of clusters')
     parser.add_argument('--epochs', required=True, type=int, help='Number of epochs')
-    parser.add_argument('--decoder_init', required=True, type=str, choices=['random', 'mean_SNPs', 'mean_random', 'kmeans', 'kmeans_logit', 'minibatch_kmeans', 'minibatch_kmeans_logit'], help='Decoder initialization')
+    parser.add_argument('--decoder_init', required=True, type=str, choices=['random', 'mean_SNPs', 'mean_random', 'kmeans', 'kmeans_logit', 'minibatch_kmeans', 'minibatch_kmeans_logit', 'torch_kmeans', 'torch_kmeans_logit'], help='Decoder initialization')
     parser.add_argument('--loss', required=True, type=str, choices=['mse', 'bce', 'wbce', 'bce_mask', 'mse_mask'], help='Loss function to train')
     parser.add_argument('--mask_frac', required=False, type=float, help='%% of SNPs used in every step (only for masked BCE loss)')
     parser.add_argument('--optimizer', required=True, type=str, choices=['adam', 'sgd'], help='Optimizer')
@@ -33,24 +32,24 @@ def parse_args():
     parser.add_argument('--max_k', required=False, type=int, default=10, choices=range(4,11), help='Maximum number of clusters for multihead admixture')
     return parser.parse_args()
 
-def initialize_wandb(should_init, trX, valX, args, silent=True):
+def initialize_wandb(should_init, trX, valX, args, out_path, silent=True):
     if not should_init:
         log.warn('Run name for wandb not specified. Skipping logging.')
         return None
     if silent:
         os.environ['WANDB_SILENT'] = 'true'
-    run_name = datetime.now().strftime('%d-%m-%Y_%H:%M:%S')
+    run_name = out_path.split('/')[-1][:-3]
     wandb.init(project='neural_admixture',
                 entity='albertdm99',
                 name=run_name,
                 config=args,
                 settings=wandb.Settings(start_method='fork')
             )
-    wandb.config.update({'train_samples': len(trX), 'val_samples': len(valX)})
+    wandb.config.update({'train_samples': len(trX), 'val_samples': len(valX), 'out_path': out_path})
     return run_name
 
 def read_data(window_size='0'):
     log.info('Reading data...')
-    f_tr = h5py.File(f'/home/usuaris/imatge/albert.dominguez/neural-admixture/data/chr22/prepared/train{window_size}.h5', 'r')
-    f_val = h5py.File(f'/home/usuaris/imatge/albert.dominguez/neural-admixture/data/chr22/prepared/valid{window_size}.h5', 'r')
+    f_tr = h5py.File(f'/mnt/gpid08/users/albert.dominguez/data/chr22/windowed/train{window_size}.h5', 'r')
+    f_val = h5py.File(f'/mnt/gpid08/users/albert.dominguez/data/chr22/windowed/valid{window_size}.h5', 'r')
     return f_tr['snps'], f_tr['populations'], f_val['snps'], f_val['populations']
