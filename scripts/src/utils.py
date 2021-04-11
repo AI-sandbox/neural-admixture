@@ -12,7 +12,7 @@ def parse_args():
     parser.add_argument('--batch_size', required=True, type=int, help='Batch size')
     parser.add_argument('--k', required=True, type=int, help='Number of clusters')
     parser.add_argument('--epochs', required=True, type=int, help='Number of epochs')
-    parser.add_argument('--decoder_init', required=True, type=str, choices=['random', 'mean_SNPs', 'mean_random', 'kmeans', 'kmeans_logit', 'minibatch_kmeans', 'minibatch_kmeans_logit', 'torch_kmeans', 'torch_kmeans_logit'], help='Decoder initialization')
+    parser.add_argument('--decoder_init', required=True, type=str, choices=['random', 'mean_SNPs', 'mean_random', 'kmeans', 'kmeans_logit', 'minibatch_kmeans', 'minibatch_kmeans_logit', 'kmeans++', 'binomial'], help='Decoder initialization')
     parser.add_argument('--loss', required=True, type=str, choices=['mse', 'bce', 'wbce', 'bce_mask', 'mse_mask'], help='Loss function to train')
     parser.add_argument('--mask_frac', required=False, type=float, help='%% of SNPs used in every step (only for masked BCE loss)')
     parser.add_argument('--optimizer', required=True, type=str, choices=['adam', 'sgd'], help='Optimizer')
@@ -30,6 +30,9 @@ def parse_args():
     parser.add_argument('--multihead', required=False, type=int, default=0, choices=[0,1], help='Whether to train multihead admixture')
     parser.add_argument('--min_k', required=False, type=int, default=3, choices=range(3,10), help='Minimum number of clusters for multihead admixture')
     parser.add_argument('--max_k', required=False, type=int, default=10, choices=range(4,11), help='Maximum number of clusters for multihead admixture')
+    parser.add_argument('--chr', required=True, type=int, choices=[1, 22], help='Chromosome number to train on')
+    parser.add_argument('--shuffle', required=True, type=int, choices=[0, 1], help='Whether to shuffle the training data at every epoch')
+    parser.add_argument('--pooling', required=False, default=1, type=int, choices=range(1,11), help='Downsample fraction')
     return parser.parse_args()
 
 def initialize_wandb(should_init, trX, valX, args, out_path, silent=True):
@@ -45,11 +48,11 @@ def initialize_wandb(should_init, trX, valX, args, out_path, silent=True):
                 config=args,
                 settings=wandb.Settings(start_method='fork')
             )
-    wandb.config.update({'train_samples': len(trX), 'val_samples': len(valX), 'out_path': out_path})
+    wandb.config.update({'train_samples': len(trX), 'val_samples': len(valX), 'out_path': out_path, 'averaged_parents': False})
     return run_name
 
-def read_data(window_size='0'):
-    log.info('Reading data...')
-    f_tr = h5py.File(f'/mnt/gpid08/users/albert.dominguez/data/chr22/windowed/train{window_size}.h5', 'r')
-    f_val = h5py.File(f'/mnt/gpid08/users/albert.dominguez/data/chr22/windowed/valid{window_size}.h5', 'r')
+def read_data(chromosome, window_size='0'):
+    log.info(f'Using data from chromosome {chromosome} ({window_size} SNPs)')
+    f_tr = h5py.File(f'/mnt/gpid08/users/albert.dominguez/data/chr{chromosome}/windowed/train{window_size}_2gen_6down.h5', 'r')
+    f_val = h5py.File(f'/mnt/gpid08/users/albert.dominguez/data/chr{chromosome}/windowed/valid{window_size}_2gen_6down.h5', 'r')
     return f_tr['snps'], f_tr['populations'], f_val['snps'], f_val['populations']

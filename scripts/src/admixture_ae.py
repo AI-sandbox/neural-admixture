@@ -4,7 +4,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 import os
+import random
 import wandb
+from plots import generate_plots
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -90,13 +92,20 @@ class AdmixtureAE(nn.Module):
         if self.dropout is not None:
             X = self.dropout(X)
         enc = self.encoder(X)
+        del X
         hid_state = self.softmax(enc)
-        reconstruction = self.decoder(hid_state)
-        return reconstruction, hid_state
+        del enc
+        return self.decoder(hid_state), hid_state
         
-    def launch_training(self, trX, optimizer, loss_f, num_epochs, device, batch_size=0, valX=None, display_logs=True, loss_weights=None, save_every=10, save_path='../outputs/model.pt', run_name=None):
+    def launch_training(self, trX, optimizer, loss_f, num_epochs,
+                        device, batch_size=0, valX=None, display_logs=True,
+                        loss_weights=None, save_every=10, save_path='../outputs/model.pt',
+                        run_name=None, plot_every=0, trY=None, valY=None, seed=42, shuffle=False):
+        if plot_every != 0:
+            assert trY is not None and valY is not None and valX is not None, 'Labels are needed if plots are to be generated'
+        random.seed(seed)
         for ep in range(num_epochs):
-            tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, loss_weights)
+            tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, loss_weights, shuffle)
             if run_name is not None and val_loss is not None:
                 wandb.log({"tr_loss": tr_loss, "val_loss": val_loss})
             elif run_name is not None:
@@ -114,14 +123,22 @@ class AdmixtureAE(nn.Module):
                     log.info(f'[METRICS] EPOCH {ep+1}: mean validation loss: {val_loss}')
             if save_every*ep > 0 and ep % save_every == 0:
                 torch.save(self.state_dict(), save_path)
+            if plot_every != 0 and (ep == 0 or (ep+1) % plot_every == 0):
+                log.info('Rendering plots for epoch {}'.format(ep+1))
+                generate_plots(self, trX, trY, valX, valY, device,
+                               batch_size, is_multihead=True,
+                               min_k=min(self.ks), max_k=max(self.ks), epoch=ep+1)
         return ep+1
 
-    def _batch_generator(self, X, batch_size=0):
+    def _batch_generator(self, X, batch_size=0, shuffle=False):
+        idxs = [i for i in range(X.shape[0])]
+        if shuffle:
+            random.shuffle(idxs)
         if batch_size < 1:
             yield torch.tensor(X, dtype=torch.float32)
         else:
             for i in range(0, X.shape[0], batch_size):
-                yield torch.tensor(X[i:i+batch_size], dtype=torch.float32)
+                yield torch.tensor(X[sorted(idxs[i:i+batch_size])], dtype=torch.float32)
 
     def _validate(self, valX, loss_f, batch_size, device):
         acum_val_loss = 0
@@ -144,16 +161,17 @@ class AdmixtureAE(nn.Module):
             loss = loss_f(rec, X)
         if self.lambda_l2 > 1e-6:
             loss += self.lambda_l2*self._get_encoder_norm()**2
+        del rec, _
         loss.backward()
         optimizer.step()
-        return loss
+        return loss.item()
 
-    def _run_epoch(self, trX, optimizer, loss_f, batch_size, valX, device, loss_weights=None):
+    def _run_epoch(self, trX, optimizer, loss_f, batch_size, valX, device, loss_weights=None, shuffle=False):
         tr_loss, val_loss = 0, None
         self.train()
-        for X in self._batch_generator(trX, batch_size):
+        for X in self._batch_generator(trX, batch_size, shuffle=shuffle):
             step_loss = self._run_step(X.to(device), optimizer, loss_f, loss_weights)
-            tr_loss += step_loss.item()
+            tr_loss += step_loss
         if valX is not None:
             self.eval()
             val_loss = self._validate(valX, loss_f, batch_size, device)

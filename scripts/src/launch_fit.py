@@ -16,7 +16,7 @@ from switchers import Switchers
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-def fit_model(trX, valX, args):
+def fit_model(trX, valX, args, trY=None, valY=None):
     switchers = Switchers.get_switchers()
     K = args.k
     num_max_epochs = args.epochs
@@ -35,6 +35,8 @@ def fit_model(trX, valX, args):
     activation_str = args.activation
     dropout = args.dropout
     multihead = args.multihead
+    shuffle = args.shuffle
+    pooling = args.pooling
     Ks = [i for i in range(args.min_k, args.max_k+1)]
     assert dropout >= 0 and dropout <= 1
     seed = args.seed
@@ -60,7 +62,7 @@ def fit_model(trX, valX, args):
                                    batch_norm=bool(batch_norm),
                                    lambda_l2=l2_penalty,
                                    encoder_activation=activation,
-                                   dropout=dropout)
+                                   dropout=dropout, pooling=pooling)
     if torch.cuda.device_count() > 1:
         model = CustomDataParallel(model)
     model.to(device)
@@ -79,7 +81,8 @@ def fit_model(trX, valX, args):
     t.start()
     actual_num_epochs = model.launch_training(trX, optimizer, loss_f, num_max_epochs, device, valX=valX,
                         batch_size=batch_size, loss_weights=loss_weights, display_logs=display_logs,
-                        save_every=save_every, save_path=save_path, run_name=run_name)
+                        save_every=save_every, save_path=save_path, run_name=run_name, plot_every=0,
+                        trY=trY, valY=valY, shuffle=shuffle, seed=seed)
     elapsed_time = t.stop()
     avg_time_per_epoch = elapsed_time/actual_num_epochs
     if log_to_wandb:
@@ -91,8 +94,8 @@ def fit_model(trX, valX, args):
 
 def main():
     args = utils.parse_args()
-    trX, trY, valX, valY = utils.read_data(args.window_size)
-    model, device = fit_model(trX, valX, args)
+    trX, trY, valX, valY = utils.read_data(args.chr, args.window_size)
+    model, device = fit_model(trX, valX, args, trY, valY)
     if model is None:
         return 1
     if not bool(args.wandb_log):

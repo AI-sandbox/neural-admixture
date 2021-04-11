@@ -74,7 +74,7 @@ def stacked_bar(data, series_labels, category_labels=None,
 
 def generate_plots(model, trX, trY, valX, valY, device,
                    batch_size, k=7, is_multihead=False,
-                   min_k=3, max_k=10, to_wandb=True):
+                   min_k=3, max_k=10, to_wandb=True, epoch=None):
     model.eval()
     with torch.no_grad():
         tr_outs = []
@@ -106,7 +106,10 @@ def generate_plots(model, trX, trY, valX, valY, device,
         stacked_bar(tr_outputs.T[:, np.array(trY) == k_idx], labels_plot, legend=k_idx == len(ancestries)-1)
         plt.title(ancestries[k_idx])
     if to_wandb:
-        wandb.log({"Training results": wandb.Image(plt)})
+        if epoch is None:
+            wandb.log({"Training results": wandb.Image(plt)})
+        else:
+            wandb.log({"Training results (epoch {})".format(epoch): wandb.Image(plt)})   
     else:
         plt.show()
     log.info('Rendering validation barplot...')
@@ -120,7 +123,10 @@ def generate_plots(model, trX, trY, valX, valY, device,
         stacked_bar(val_outputs.T[:, np.array(valY) == k_idx], labels_plot, legend=k_idx == len(ancestries)-1)
         plt.title(ancestries[k_idx])
     if to_wandb:
-        wandb.log({"Validation results": wandb.Image(plt)})
+        if epoch is None:
+            wandb.log({"Validation results": wandb.Image(plt)})
+        else:
+            wandb.log({"Validation results (epoch {})".format(epoch): wandb.Image(plt)})   
     else:
         plt.show()
     log.info('Done!')
