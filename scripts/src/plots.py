@@ -71,10 +71,41 @@ def stacked_bar(data, series_labels, category_labels=None,
                          va="center")
     plt.xlim((0, data.shape[1]))
 
+def plot_pca_multihead(X_pca, y, model, k, Ks, pca, init=None, to_wandb=True):
+    ancestries = sorted(np.unique(y).tolist())
+    if init is None and model is not None:
+        P = torch.tensor([p for p in model.decoders.decoders[k-min(Ks)].parameters()][0]).detach().numpy()
+    elif init is not None:
+        for i in range(k-min(Ks)+1):
+            ini = end if i != 0 else 0
+            end = ini+Ks[i]
+        P = init[ini:end].detach().numpy()
+    else:
+        raise Exception
+    if init is None:
+        C = pca.transform(P.T)
+    else:
+        C = pca.transform(P)
+    fig, ax = plt.subplots(figsize=(10, 7))
+    scatter = ax.scatter(X_pca[:, 0], X_pca[:, 1], c=y, s=0.6, alpha=0.9, cmap="tab10")
+    # produce a legend with the unique colors from the scatter
+    legend1 = ax.legend(*(scatter.legend_elements()[0], ancestries), title="Classes")
+
+    ax.add_artist(legend1)
+    n = [str(i) for i in range(k)]
+    for i, txt in enumerate(n):
+        ax.annotate(txt, (C[i,0], C[i,1]), fontsize='large')
+    plot_key = 'Initialization weights' if init is not None else 'Trained weights'
+    plt.title('{}; k = {}'.format(plot_key, k))
+    if to_wandb:
+        wandb.log({plot_key: wandb.Image(plt)})
+    else:
+        plt.show()
 
 def generate_plots(model, trX, trY, valX, valY, device,
                    batch_size, k=7, is_multihead=False,
-                   min_k=3, max_k=10, to_wandb=True, epoch=None):
+                   min_k=3, max_k=10, to_wandb=True, epoch=None,
+                   pca_obj=None, P_init=None, linear=True):
     model.eval()
     with torch.no_grad():
         tr_outs = []
@@ -129,5 +160,17 @@ def generate_plots(model, trX, trY, valX, valY, device,
             wandb.log({"Validation results (epoch {})".format(epoch): wandb.Image(plt)})   
     else:
         plt.show()
+    if linear:
+        log.info('Rendering PCA plots...')
+        try:
+            model.to(torch.device('cpu'))
+            Ks = np.arange(min_k, max_k+1)
+            trX_pca = pca_obj.transform(trX)
+            plot_pca_multihead(trX_pca, np.array(trY[:]), None, k, Ks, pca_obj, init=P_init, to_wandb=to_wandb)
+            plot_pca_multihead(trX_pca, np.array(trY[:]), model, k, Ks, pca_obj, init=None, to_wandb=to_wandb)
+        except Exception as e:
+            log.exception(e)
+            log.warn('Could not render PCA plots.')
+            pass
     log.info('Done!')
     return 0

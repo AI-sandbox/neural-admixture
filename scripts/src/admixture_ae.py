@@ -11,6 +11,12 @@ from plots import generate_plots
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
+class ZeroOneClipper(object):
+    def __call__(self, module):
+        if hasattr(module, 'weight'):
+            w = module.weight.data
+            w.clamp_(0.,1.)
+
 class ConstrainedLinear(torch.nn.Module):
     def __init__ (self, input_size, output_size, hard_init=None, bias=True): 
         super().__init__()
@@ -31,12 +37,13 @@ class ConstrainedLinear(torch.nn.Module):
             self.W = nn.Parameter(hard_init)
         self.bias = bias
         if self.bias:
-            self.b = nn.Parameter(torch.ones(output_size)) 
+            self.b = nn.Parameter(torch.ones(output_size))
+        self.sigmoid = torch.nn.Sigmoid()
 
     def forward(self, x):
         if self.bias:
-            return torch.addmm(self.b, x, torch.sigmoid(self.W))
-        return torch.mm(x, torch.sigmoid(self.W)) 
+            return torch.addmm(self.b, x, self.sigmoid(self.W))
+        return torch.clamp(torch.mm(x, self.sigmoid(self.W)), 1e-4, 1-1e-4)
 
 
 class Projector(nn.Module):
@@ -46,38 +53,39 @@ class Projector(nn.Module):
         pass
 
 class AdmixtureAE(nn.Module):
-    def __init__(self, k, num_features, encoder_activation=nn.ReLU(),
+    def __init__(self, k=None, num_features=None, encoder_activation=nn.ReLU(),
                  P_init=None, deep_encoder=False, batch_norm=False,
                  lambda_l2=0, dropout=0):
         super().__init__()
         self.k = k
         self.num_features = num_features
-        self.deep_encoder = deep_encoder
-        self.encoder_activation = encoder_activation
-        self.batch_norm = nn.BatchNorm1d(num_features) if batch_norm else None
-        self.dropout = nn.Dropout(dropout) if dropout > 0 else None
-        self.lambda_l2 = lambda_l2 if lambda_l2 > 1e-6 else 0
-        if not self.deep_encoder:
-            self.encoder = nn.Linear(self.num_features, self.k, bias=True)            
-        elif not batch_norm:
-            self.encoder = nn.Sequential(
-                    nn.Linear(self.num_features, 512, bias=True),
-                    self.encoder_activation,
-                    nn.Linear(512, 128, bias=True),
-                    self.encoder_activation,
-                    nn.Linear(128, 32, bias=True),
-                    self.encoder_activation,
-                    nn.Linear(32, self.k, bias=True)
-            )
-        else:
-            self.encoder = nn.Sequential(
-                    nn.Linear(self.num_features, 512, bias=True),
-                    self.encoder_activation,
-                    nn.Linear(512, self.k, bias=True)
-            )
-        self.decoder = ConstrainedLinear(self.k, num_features, hard_init=P_init, bias=False)
-        self.sigmoid = nn.Sigmoid()
-        self.softmax = nn.Softmax(dim=1)
+        if self.k is not None and self.num_features is not None:
+            self.deep_encoder = deep_encoder
+            self.encoder_activation = encoder_activation
+            self.batch_norm = nn.BatchNorm1d(num_features) if batch_norm else None
+            self.dropout = nn.Dropout(dropout) if dropout > 0 else None
+            self.lambda_l2 = lambda_l2 if lambda_l2 > 1e-6 else 0
+            if not self.deep_encoder:
+                self.encoder = nn.Linear(self.num_features, self.k, bias=True)            
+            elif not batch_norm:
+                self.encoder = nn.Sequential(
+                        nn.Linear(self.num_features, 512, bias=True),
+                        self.encoder_activation,
+                        nn.Linear(512, 128, bias=True),
+                        self.encoder_activation,
+                        nn.Linear(128, 32, bias=True),
+                        self.encoder_activation,
+                        nn.Linear(32, self.k, bias=True)
+                )
+            else:
+                self.encoder = nn.Sequential(
+                        nn.Linear(self.num_features, 512, bias=True),
+                        self.encoder_activation,
+                        nn.Linear(512, self.k, bias=True)
+                )
+            self.decoder = ConstrainedLinear(self.k, num_features, hard_init=P_init, bias=False)
+            self.sigmoid = nn.Sigmoid()
+            self.softmax = nn.Softmax(dim=1)
 
     def _get_encoder_norm(self):
         if not self.deep_encoder:
@@ -100,23 +108,22 @@ class AdmixtureAE(nn.Module):
     def launch_training(self, trX, optimizer, loss_f, num_epochs,
                         device, batch_size=0, valX=None, display_logs=True,
                         loss_weights=None, save_every=10, save_path='../outputs/model.pt',
-                        run_name=None, plot_every=0, trY=None, valY=None, seed=42, shuffle=False):
+                        run_name=None, plot_every=0, trY=None, valY=None, seed=42, shuffle=False,
+                        optimizer_2=None):
         if plot_every != 0:
             assert trY is not None and valY is not None and valX is not None, 'Labels are needed if plots are to be generated'
+        log.info('{}oing to alternate between encoder and decoder.'.format('Not g' if optimizer_2 is None else 'G'))
         random.seed(seed)
         for ep in range(num_epochs):
-            tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, loss_weights, shuffle)
+            if optimizer_2 is None or ep % 2 == 0:
+                tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, loss_weights, shuffle)
+            else:
+                tr_loss, val_loss = self._run_epoch(trX, optimizer_2, loss_f, batch_size, valX, device, loss_weights, shuffle)
             if run_name is not None and val_loss is not None:
                 wandb.log({"tr_loss": tr_loss, "val_loss": val_loss})
             elif run_name is not None:
                 wandb.log({"tr_loss": tr_loss})
-            try:
-                assert not math.isnan(tr_loss)
-            except AssertionError as ae:
-                ae.args += ('Training loss is NaN',)
-                raise ae
-            except Exception as e:
-                raise e
+            assert not math.isnan(tr_loss), 'Training loss is NaN'
             if display_logs:
                 log.info(f'[METRICS] EPOCH {ep+1}: mean training loss: {tr_loss}')
                 if val_loss is not None:

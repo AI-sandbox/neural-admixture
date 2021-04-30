@@ -1,7 +1,7 @@
 import logging
 import torch
 import torch.nn as nn
-from admixture_ae import AdmixtureAE, ConstrainedLinear
+from admixture_ae import AdmixtureAE, ZeroOneClipper
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -23,39 +23,70 @@ class MultiHeadEncoder(nn.Module):
 
 
 class MultiHeadDecoder(nn.Module):
-    def __init__(self, ks, output_size, bias=False, inits=None):
+    def __init__(self, ks, output_size, bias=False, inits=None, freeze=False):
         super().__init__()
         self.ks = ks
+        self.freeze = freeze
         if inits is None:
             self.decoders = nn.ModuleList(
-                [ConstrainedLinear(k, output_size, hard_init=inits, bias=bias) for k in self.ks]
+                [Linear(k, output_size, bias=bias) for k in self.ks]
             )
+            if self.freeze:
+                log.warn('Not going to freeze weights as no initialization was provided.')   
         else:
             layers = [None]*len(self.ks)
             for i in range(len(ks)):
                 ini = end if i != 0 else 0
                 end = ini+self.ks[i]
-                layers[i] = ConstrainedLinear(self.ks[i], output_size, hard_init=inits[ini:end], bias=bias)            
+                layers[i] = nn.Linear(self.ks[i], output_size, bias=bias)
+                layers[i].weight = torch.nn.Parameter(inits[ini:end].clone().detach().requires_grad_(not self.freeze).T)
             self.decoders = nn.ModuleList(layers)
+            if self.freeze:
+                log.info('Decoder weights will be frozen.')
         assert len(self.decoders) == len(self.ks)
 
     def _get_decoder_for_k(self, k):
         return self.decoders[k-min(self.ks)]
 
     def forward(self, hid_states):
-        outputs = [self._get_decoder_for_k(self.ks[i])(hid_states[i]) for i in range(len(self.ks))]
+        outputs = [torch.clamp(self._get_decoder_for_k(self.ks[i])(hid_states[i]), 0, 1) for i in range(len(self.ks))]
         return outputs
 
+class NonLinearMultiHeadDecoder(nn.Module):
+    def __init__(self, ks, output_size, bias=False,
+                 hidden_size=512, hidden_activation=nn.ReLU(),
+                 inits=None):
+        super().__init__()
+        self.ks = ks
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.heads_decoder = nn.Linear(sum(self.ks), self.hidden_size, bias=bias)
+        self.common_decoder = nn.Linear(self.hidden_size, self.output_size)
+        self.nonlinearity = hidden_activation
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, hid_states):
+        if len(hid_states) > 1:
+            concat_states = torch.cat(hid_states, 1)
+        else:
+            concat_states = hid_states[0]
+        dec = self.nonlinearity(self.heads_decoder(concat_states))
+        rec = self.sigmoid(self.common_decoder(dec))
+        return rec
 
 class AdmixtureMultiHead(AdmixtureAE):
     def __init__(self, ks, num_features, encoder_activation=nn.ReLU(),
                  P_init=None, batch_norm=False, batch_norm_hidden=False,
-                 lambda_l2=0, dropout=0, pooling=1):
-        super().__init__(ks[0], num_features)
+                 lambda_l2=0, dropout=0, pooling=1, linear=True,
+                 hidden_size=512, freeze_decoder=False):
+        super().__init__()
         self.ks = ks
         self.num_features = num_features
+        self.hidden_size = hidden_size
         self.encoder_activation = encoder_activation
         self.pooling_factor = pooling
+        self.linear=linear
+        self.freeze_decoder = freeze_decoder
         self.encoder_input_size = num_features//self.pooling_factor+1 if self.pooling_factor > 1 else num_features
         self.batch_norm = nn.BatchNorm1d(self.encoder_input_size) if batch_norm else None
         self.batch_norm_hidden = nn.BatchNorm1d(512) if batch_norm_hidden else None
@@ -63,11 +94,19 @@ class AdmixtureMultiHead(AdmixtureAE):
         self.dropout = nn.Dropout(dropout) if dropout > 0 else None
         self.lambda_l2 = lambda_l2 if lambda_l2 > 1e-6 else 0
         self.common_encoder = nn.Sequential(
-                nn.Linear(self.encoder_input_size, 512, bias=True),
+                nn.Linear(self.encoder_input_size, self.hidden_size, bias=True),
                 self.encoder_activation,
         )
-        self.multihead_encoder = MultiHeadEncoder(512, self.ks)
-        self.decoders = MultiHeadDecoder(self.ks, num_features, bias=False, inits=P_init)
+        self.multihead_encoder = MultiHeadEncoder(self.hidden_size, self.ks)
+        if self.linear:
+            self.decoders = MultiHeadDecoder(self.ks, num_features, bias=False, inits=P_init, freeze=self.freeze_decoder)
+            self.clipper = ZeroOneClipper()
+            self.decoders.decoders.apply(self.clipper)
+
+        else:
+            self.decoders = NonLinearMultiHeadDecoder(self.ks, num_features, bias=True,
+                                                      hidden_size=self.hidden_size,
+                                                      hidden_activation=self.encoder_activation)
 
     def _get_encoder_norm(self):
         return torch.norm(list(self.common_encoder.parameters())[0])
@@ -91,14 +130,16 @@ class AdmixtureMultiHead(AdmixtureAE):
         optimizer.zero_grad()
         recs, _ = self(X)
         if loss_weights is not None:
-            loss = sum((loss_f(rec, X, loss_weights) for rec in recs))
+            loss = sum((loss_f(rec, X, loss_weights) for rec in recs)) if self.linear else loss_f(recs, X, loss_weights)
         else:
-            loss = sum((loss_f(rec, X) for rec in recs))
+            loss = sum((loss_f(rec, X) for rec in recs)) if self.linear else loss_f(recs, X)
         if self.lambda_l2 > 1e-6:
             loss += self.lambda_l2*self._get_encoder_norm()**2
         del recs, _
         loss.backward()
         optimizer.step()
+        if self.linear:
+            self.decoders.decoders.apply(self.clipper)
         return loss.item()
     
     def _validate(self, valX, loss_f, batch_size, device):
@@ -107,7 +148,7 @@ class AdmixtureMultiHead(AdmixtureAE):
             for X in self._batch_generator(valX, batch_size):
                 X = X.to(device)
                 recs, _ = self(X)
-                acum_val_loss += sum((loss_f(rec, X).item() for rec in recs))
+                acum_val_loss += sum((loss_f(rec, X).item() for rec in recs)) if self.linear else loss_f(recs, X).item()
             if self.lambda_l2 > 1e-6:
                 acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2
         return acum_val_loss

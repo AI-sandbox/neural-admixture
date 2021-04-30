@@ -61,3 +61,9 @@ class MaskedMSE:
             mask_sel = torch.tensor(np.tile(np.random.binomial(1, self.mask_frac, output.shape[1]), (output.shape[0],1)), device=self.device, dtype=torch.float)
         loss = F.mse_loss(output, target, reduction='none')
         return torch.mean(torch.mul(loss, mask_sel))
+
+class AdmixtureLoss:
+    def __call__(self, output:Tensor, target:Tensor, **kwargs)->Tensor:
+        output = torch.clamp(output, 3.72e-44, 1-3.72e-44)
+        loss = target*torch.log(output) + (2-target)*torch.log(1-output)
+        return torch.neg(torch.mean(loss))

@@ -1,10 +1,12 @@
 import logging
 import numpy as np
 import os
+import pickle
 import time
 import torch
 from collections.abc import Iterable
 from sklearn.cluster import KMeans, MiniBatchKMeans, kmeans_plusplus
+from sklearn.decomposition import PCA
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -12,18 +14,17 @@ log = logging.getLogger(__name__)
 
 class KMeansInitialization(object):
     @classmethod
-    def get_decoder_init(cls, X, k, minibatch, use_logit, batch_size=200, seed=42):
-        weights_path = '/mnt/gpid08/users/albert.dominguez/weights/chr1/minibatch_kmeans_logit_2gens_10iters_down6.pt'
+    def get_decoder_init(cls, X, k, minibatch, use_logit, batch_size=200, seed=42, path='/mnt/gpid08/users/albert.dominguez/weights/chr22/minibatch_kmeans_2gens_3init_3iter.pt'):
         if minibatch and use_logit:
-            if os.path.exists(weights_path):
+            if os.path.exists(path):
                 log.info('Loading k-means cluster centroids from precomputed tensor.')
-                return torch.load(weights_path)
+                return torch.load(path)
         log.info('Computing k-Means cluster centroids...')
         if not isinstance(k, Iterable):
             if minibatch:
-                k_means_obj = MiniBatchKMeans(n_clusters=k, batch_size=batch_size, random_state=seed, n_init=1, max_iter=10).fit(X)
+                k_means_obj = MiniBatchKMeans(n_clusters=k, batch_size=batch_size, random_state=seed, n_init=3, max_iter=3).fit(X)
             else:
-                k_means_obj = KMeans(n_clusters=k, random_state=42, n_init=1, max_iter=1).fit(X)
+                k_means_obj = KMeans(n_clusters=k, random_state=42, n_init=3, max_iter=3).fit(X)
             if not use_logit:
                 return torch.tensor(k_means_obj.cluster_centers_).float()
             P_init = torch.clamp(torch.tensor(k_means_obj.cluster_centers_).float(), min=1e-4, max=1-1e-4) 
@@ -37,10 +38,10 @@ class KMeansInitialization(object):
             log.info(f'Running {len(k)} algorithms (multihead)...')
             k_means_objs = [None]*len(k)
             if minibatch:
-                k_means_objs = [MiniBatchKMeans(n_clusters=i, batch_size=batch_size, random_state=seed, n_init=1, max_iter=1, compute_labels=False).fit(X)
+                k_means_objs = [MiniBatchKMeans(n_clusters=i, batch_size=batch_size, random_state=seed, n_init=3, max_iter=3, compute_labels=False).fit(X)
                                 for i in k]
             else:
-                k_means_objs = [KMeans(n_clusters=i, random_state=42, n_init=1, max_iter=1, compute_labels=False).fit(X) for i in k]
+                k_means_objs = [KMeans(n_clusters=i, random_state=42, n_init=3, max_iter=3, compute_labels=False).fit(X) for i in k]
             if not use_logit:
                 return torch.cat([torch.tensor(obj.cluster_centers_) for obj in k_means_objs], axis=0).float()
             P_init = torch.clamp(torch.cat([torch.tensor(obj.cluster_centers_) for obj in k_means_objs], axis=0).float(),
@@ -50,25 +51,23 @@ class KMeansInitialization(object):
             if sum(torch.isnan(P_init.flatten())).item() > 0:
                 log.error('Initialization weights contain NaN values.')
                 raise Exception
-            torch.save(P_init, weights_path)
+            torch.save(P_init, path)
             log.info('All k-means run successfully. Initialization was saved.')
             return P_init
 
 
 class KMeansPlusPlusInitialization(object):
     @classmethod
-    def get_decoder_init(cls, X, k, seed=42):
-        weights_path = '/mnt/gpid08/users/albert.dominguez/weights/chr1/kmeans++_2gens_down6.pt'
-        if os.path.exists(weights_path):
+    def get_decoder_init(cls, X, k, seed=42, path='/mnt/gpid08/users/albert.dominguez/weights/chr22/kmeans++_2gens_avg.pt'):
+        if os.path.exists(path):
             log.info('Loading k-means++ centroids from precomputed tensor.')
-            return torch.load(weights_path)
+            return torch.load(path)
         log.info('Computing k-Means++ centroids...')
         X_np = np.array(X[:])
         if not isinstance(k, Iterable):
             centers, _ = kmeans_plusplus(X_np, n_clusters=k, random_state=seed)
             P_init = torch.clamp(torch.tensor(centers).float(), min=1e-4, max=1-1e-4) 
             del centers, X_np
-            P_init = torch.logit(P_init, eps=1e-4)
             if sum(torch.isnan(P_init.flatten())).item() > 0:
                 log.error('Initialization weights contain NaN values.')
                 raise Exception
@@ -80,11 +79,10 @@ class KMeansPlusPlusInitialization(object):
             P_init = torch.clamp(torch.cat([torch.tensor(obj) for obj in centers], axis=0).float(),
                                  min=1e-4, max=1-1e-4)
             del centers, X_np
-            P_init = torch.logit(P_init, eps=1e-4)
             if sum(torch.isnan(P_init.flatten())).item() > 0:
                 log.error('Initialization weights contain NaN values.')
                 raise Exception
-            torch.save(P_init, weights_path)
+            torch.save(P_init, path)
             log.info('All k-means++ run successfully. Initialization was saved.')
             return P_init
 
@@ -103,7 +101,65 @@ class SNPsMeanInitialization(object):
 
 class BinomialInitialization(object):
     @classmethod
-    def get_decoder_init(cls, X, K):
+    def get_decoder_init(cls, X, K, path='/mnt/gpid08/users/albert.dominguez/weights/chr1/binomial_2gens_unlinked.pt'):
+        if os.path.exists(path):
+            log.info('Loading binomial initialization from precomputed tensor.')
+            return torch.load(path)
         log.info(f'Running binomial initialization...')
-        P_inits = [torch.bernoulli(torch.tensor([0.]*X.shape[1]), p=0.1) for k in range(sum(K))]
-        return torch.logit(torch.vstack(P_inits), eps=1e-4)
+        np.random.seed(42)
+        P_inits = [torch.tensor(np.random.binomial(n=1, p=0.1, size=X.shape[1]), dtype=torch.float) for _ in range(sum(K))]
+        P_init = torch.logit(torch.vstack(P_inits), eps=1e-4)
+        del P_inits
+        torch.save(P_init, path)
+        return P_init
+
+class PCAInitialization(object):
+    @classmethod
+    def get_decoder_init(cls, X, K, path='/mnt/gpid08/users/albert.dominguez/data/chr22/pca_gen2_avg.pkl'):
+        if len(K) > 1:
+            raise NotImplementedError
+        k = K[0]
+        if k <= 4 or k > 9:
+            raise NotImplementedError
+        log.info('Running PCA initialization...')
+        try:
+            with open(path, 'rb') as fb:
+                pca_obj = pickle.load(fb)
+            log.info('PCA loaded.') 
+        except FileNotFoundError as fnfe:
+            log.info('PCA object not found. Performing PCA...')
+            pca_obj = PCA(n_components=2, random_state=42)
+            pca_obj.fit(X)
+            with open(path, 'wb') as fb:
+                pickle.dump(pca_obj, fb)
+        except Exception as e:
+            raise e
+        X_pca = pca_obj.transform(X)
+        svs = np.sqrt(pca_obj.singular_values_)
+        part1 = np.array([-svs[0]/2,0,svs[0]/2])
+        part2 = np.array([-svs[1]/2,0,svs[1]/2])
+        xv, yv = np.meshgrid(part1, part2)
+        concat = np.concatenate((xv.reshape(-1,1), yv.reshape(-1,1)), axis=1)
+        init_points = [None]*len(concat)
+        for i, p in enumerate(concat):
+            rep = np.vstack([p]*X.shape[0])
+            init_points[i] = X_pca[np.argmin(np.linalg.norm(rep-X_pca, axis=1))]
+        init_points = np.vstack(init_points)
+        np.random.seed(42)
+        inv_tr = pca_obj.inverse_transform(init_points)
+        idxs = np.random.choice(inv_tr.shape[0], k, replace=False)
+        P_init = torch.tensor(inv_tr[idxs,:], dtype=torch.float)
+        log.info('Weights initialized.')
+        return P_init
+
+class AdmixtureInitialization(object):
+    @classmethod
+    def get_decoder_init(cls, X, K, path):
+        log.info('Fetching ADMIXTURE weights...')
+        if len(K) > 1:
+            raise NotImplementedError
+        # Loads standard ADMIXTURE output format
+        P_init = torch.tensor(1-np.genfromtxt(path, delimiter=' ').T, dtype=torch.float32)
+        assert P_init.size()[0] == K[0], 'Input P is not coherent with the value of K'
+        log.info('Weights fetched.')
+        return P_init

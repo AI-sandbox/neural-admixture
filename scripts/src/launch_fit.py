@@ -1,8 +1,9 @@
 import logging
 import matplotlib.pyplot as plt
-import sys
 import numpy as np
+import pickle
 import plots
+import sys
 import torch
 import utils
 import uuid
@@ -22,11 +23,10 @@ def fit_model(trX, valX, args, trY=None, valY=None):
     num_max_epochs = args.epochs
     batch_size = args.batch_size
     learning_rate = args.learning_rate
-    window_size = args.window_size
     save_dir = args.save_dir
     deep_encoder = args.deep_encoder == 1
     decoder_init = args.decoder_init
-    optimizer = args.optimizer
+    optimizer_str = args.optimizer
     loss = args.loss
     mask_frac = args.mask_frac
     save_every = args.save_every
@@ -37,8 +37,13 @@ def fit_model(trX, valX, args, trY=None, valY=None):
     multihead = args.multihead
     shuffle = args.shuffle
     pooling = args.pooling
+    alternate = bool(args.alternate)
+    hidden_size = args.hidden_size
+    linear = bool(args.linear)
+    freeze_decoder = bool(args.freeze_decoder)
+    init_path = args.init_path
     Ks = [i for i in range(args.min_k, args.max_k+1)]
-    assert dropout >= 0 and dropout <= 1
+    assert dropout >= 0 and dropout <= 1, 'Dropout must be between 0 and 1'
     seed = args.seed
     display_logs = bool(args.display_logs)
     log_to_wandb = bool(args.wandb_log)
@@ -50,8 +55,13 @@ def fit_model(trX, valX, args, trY=None, valY=None):
     torch.manual_seed(seed)
     # Initialization
     log.info('Initializing...')
-    P_init = switchers['initializations'][decoder_init](trX, Ks if multihead else K, batch_size, seed)
+    if linear:
+        P_init = switchers['initializations'][decoder_init](trX, Ks if multihead else K, batch_size, seed, init_path)
+    else:
+        P_init = None
+        log.info('Non-linear decoder weights will be randomly initialized.')
     activation = switchers['activations'][activation_str](0)
+    log.info('Features: {}'.format(trX.shape[1]))
     if not multihead:
         model = AdmixtureAE(K, trX.shape[1], P_init=P_init,
                         deep_encoder=deep_encoder, batch_norm=bool(batch_norm),
@@ -62,7 +72,9 @@ def fit_model(trX, valX, args, trY=None, valY=None):
                                    batch_norm=bool(batch_norm),
                                    lambda_l2=l2_penalty,
                                    encoder_activation=activation,
-                                   dropout=dropout, pooling=pooling)
+                                   dropout=dropout, pooling=pooling,
+                                   linear=linear, hidden_size=hidden_size,
+                                   freeze_decoder=freeze_decoder)
     if torch.cuda.device_count() > 1:
         model = CustomDataParallel(model)
     model.to(device)
@@ -70,7 +82,18 @@ def fit_model(trX, valX, args, trY=None, valY=None):
         wandb.watch(model)
     
     # Optimizer
-    optimizer = switchers['optimizers'][optimizer](model.parameters(), learning_rate)
+    if alternate:
+        optimizer = switchers['optimizers'][optimizer_str]( # Encoder optimizer
+            list(model.batch_norm.parameters())+list(model.common_encoder.parameters())+list(model.multihead_encoder.parameters()),
+            learning_rate
+        )
+        optimizer_dec = switchers['optimizers'][optimizer_str]( # Decoder optimizer
+            model.decoders.parameters(),
+            learning_rate
+        )
+    else:
+        optimizer = switchers['optimizers'][optimizer_str](filter(lambda p: p.requires_grad, model.parameters()), learning_rate)
+    log.info('Optimizer successfully loaded.')
     # Losses
     loss_f = switchers['losses'][loss](device, mask_frac)
     loss_weights = None if loss != 'wbce' else torch.tensor(trX.std(axis=0)).float().to(device)
@@ -80,9 +103,9 @@ def fit_model(trX, valX, args, trY=None, valY=None):
     t = Timer()
     t.start()
     actual_num_epochs = model.launch_training(trX, optimizer, loss_f, num_max_epochs, device, valX=valX,
-                        batch_size=batch_size, loss_weights=loss_weights, display_logs=display_logs,
-                        save_every=save_every, save_path=save_path, run_name=run_name, plot_every=0,
-                        trY=trY, valY=valY, shuffle=shuffle, seed=seed)
+                       batch_size=batch_size, loss_weights=loss_weights, display_logs=display_logs,
+                       save_every=save_every, save_path=save_path, run_name=run_name, plot_every=0,
+                       trY=trY, valY=valY, shuffle=shuffle, seed=seed, optimizer_2=optimizer_dec if alternate else None)
     elapsed_time = t.stop()
     avg_time_per_epoch = elapsed_time/actual_num_epochs
     if log_to_wandb:
@@ -90,20 +113,31 @@ def fit_model(trX, valX, args, trY=None, valY=None):
         wandb.run.summary['avg_epoch_time'] = elapsed_time/actual_num_epochs
     torch.save(model.state_dict(), save_path)
     log.info('Fit done.')
-    return model, device
+    return model, P_init, device
 
 def main():
     args = utils.parse_args()
-    trX, trY, valX, valY = utils.read_data(args.chr, args.window_size)
-    model, device = fit_model(trX, valX, args, trY, valY)
+    trX, trY, valX, valY = utils.read_data(args.chr)
+    model, P_init, device = fit_model(trX, valX, args, trY, valY)
     if model is None:
         return 1
     if not bool(args.wandb_log):
         return 0
+    pca_path = '/mnt/gpid08/users/albert.dominguez/data/chr22/pca_gen2_avg.pkl'
+    try:
+        with open(pca_path, 'rb') as fb:
+            pca_obj = pickle.load(fb)
+    except FileNotFoundError as fnf:
+        log.exception(fnf)
+        pca_obj = None
+        pass
     return plots.generate_plots(model, trX, trY, valX, valY, device,
                                 args.batch_size, k=args.k,
                                 is_multihead=args.multihead,
-                                min_k=args.min_k, max_k=args.max_k)
+                                to_wandb=bool(args.wandb_log),
+                                min_k=args.min_k, max_k=args.max_k,
+                                P_init=P_init, pca_obj=pca_obj,
+                                linear=args.linear)
 
 if __name__ == '__main__':
     sys.exit(main())
