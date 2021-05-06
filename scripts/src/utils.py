@@ -12,13 +12,15 @@ def parse_args():
     parser.add_argument('--batch_size', required=True, type=int, help='Batch size')
     parser.add_argument('--k', required=True, type=int, help='Number of clusters')
     parser.add_argument('--epochs', required=True, type=int, help='Number of epochs')
-    parser.add_argument('--decoder_init', required=True, type=str, choices=['random', 'mean_SNPs', 'mean_random', 'kmeans', 'kmeans_logit', 'minibatch_kmeans', 'minibatch_kmeans_logit', 'kmeans++', 'binomial'], help='Decoder initialization')
-    parser.add_argument('--loss', required=True, type=str, choices=['mse', 'bce', 'wbce', 'bce_mask', 'mse_mask'], help='Loss function to train')
+    parser.add_argument('--decoder_init', required=True, type=str, choices=['random', 'mean_SNPs', 'mean_random', 'kmeans',
+                                                                            'kmeans_logit', 'minibatch_kmeans', 'minibatch_kmeans_logit',
+                                                                            'kmeans++', 'binomial', 'pca', 'admixture',
+                                                                            'pckmeans'], help='Decoder initialization')
+    parser.add_argument('--loss', required=True, type=str, choices=['mse', 'bce', 'wbce', 'bce_mask', 'mse_mask', 'admixture'], help='Loss function to train')
     parser.add_argument('--mask_frac', required=False, type=float, help='%% of SNPs used in every step (only for masked BCE loss)')
     parser.add_argument('--optimizer', required=True, type=str, choices=['adam', 'sgd'], help='Optimizer')
     parser.add_argument('--save_every', required=True, type=int, help='Save every this number of epochs')
     parser.add_argument('--save_dir', required=True, type=str, help='Save model in this directory')
-    parser.add_argument('--window_size', required=True, type=str, help='SNPs window size (e.g. 1K, 50K, 100K)')
     parser.add_argument('--deep_encoder', required=True, type=int, choices=[0, 1], help='Whether to use deep encoder or not')
     parser.add_argument('--batchnorm', required=True, type=int, choices=[0, 1], help='Whether to use batch norm in encoder or not')
     parser.add_argument('--l2_penalty', required=True, type=float, help='L2 penalty on encoder weights')
@@ -28,11 +30,17 @@ def parse_args():
     parser.add_argument('--wandb_log', required=True, type=int, choices=[0, 1], help='Whether to log to wandb or not')
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
     parser.add_argument('--multihead', required=False, type=int, default=0, choices=[0,1], help='Whether to train multihead admixture')
-    parser.add_argument('--min_k', required=False, type=int, default=3, choices=range(3,10), help='Minimum number of clusters for multihead admixture')
-    parser.add_argument('--max_k', required=False, type=int, default=10, choices=range(4,11), help='Maximum number of clusters for multihead admixture')
-    parser.add_argument('--chr', required=True, type=int, choices=[1, 22], help='Chromosome number to train on')
+    parser.add_argument('--min_k', required=False, type=int, default=3, choices=range(3,15), help='Minimum number of clusters for multihead admixture')
+    parser.add_argument('--max_k', required=False, type=int, default=10, choices=range(4,16), help='Maximum number of clusters for multihead admixture')
+    parser.add_argument('--chr', required=True, type=str, choices=['1', '22', 'dogs'], help='Chromosome number to train on')
     parser.add_argument('--shuffle', required=True, type=int, choices=[0, 1], help='Whether to shuffle the training data at every epoch')
     parser.add_argument('--pooling', required=False, default=1, type=int, choices=range(1,11), help='Downsample fraction')
+    parser.add_argument('--alternate', required=True, default=0, type=int, choices=[0, 1], help='Whether to alternate between encoder or decoder optimization')
+    parser.add_argument('--hidden_size', required=False, default=512, type=int, help='Hidden size in encoder and non-linear decoder')
+    parser.add_argument('--linear', required=True, type=int, choices=[0, 1], help='Whether to use a linear decoder or not')
+    parser.add_argument('--freeze_decoder', required=True, type=int, choices=[0, 1], help='Whether to freeze linear decoder weights')
+    parser.add_argument('--init_path', required=False, type=str, help='Path containing precomputed initialization weights to load from')
+    parser.add_argument('--supervised', required=True, type=int, choices=[0, 1], help='Whether to use the supervised version or not')
     return parser.parse_args()
 
 def initialize_wandb(should_init, trX, valX, args, out_path, silent=True):
@@ -48,11 +56,16 @@ def initialize_wandb(should_init, trX, valX, args, out_path, silent=True):
                 config=args,
                 settings=wandb.Settings(start_method='fork')
             )
-    wandb.config.update({'train_samples': len(trX), 'val_samples': len(valX), 'out_path': out_path, 'averaged_parents': False})
+    wandb.config.update({'train_samples': trX.shape[0],
+                         'val_samples': valX.shape[0],
+                         'SNPs': trX.shape[1],
+                         'out_path': out_path,
+                         'averaged_parents': True,
+                         'sum_parents': False})
     return run_name
 
-def read_data(chromosome, window_size='0'):
-    log.info(f'Using data from chromosome {chromosome} ({window_size} SNPs)')
-    f_tr = h5py.File(f'/mnt/gpid08/users/albert.dominguez/data/chr{chromosome}/windowed/train{window_size}_2gen_6down.h5', 'r')
-    f_val = h5py.File(f'/mnt/gpid08/users/albert.dominguez/data/chr{chromosome}/windowed/valid{window_size}_2gen_6down.h5', 'r')
+def read_data(chromosome):
+    log.info(f'Using data from chromosome {chromosome}')
+    f_tr = h5py.File(f'/mnt/gpid08/users/albert.dominguez/data/chr{chromosome}/windowed/train_2gen_avg.h5', 'r')
+    f_val = h5py.File(f'/mnt/gpid08/users/albert.dominguez/data/chr{chromosome}/windowed/valid_2gen_avg.h5', 'r')
     return f_tr['snps'], f_tr['populations'], f_val['snps'], f_val['populations']

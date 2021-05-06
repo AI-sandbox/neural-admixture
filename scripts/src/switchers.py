@@ -27,7 +27,8 @@ class Switchers(object):
         'kmeans++': lambda X, k, batch_size, seed, path: init.KMeansPlusPlusInitialization.get_decoder_init(X, k, seed),
         'binomial': lambda X, k, batch_size, seed, path: init.BinomialInitialization.get_decoder_init(X, k),
         'pca': lambda X, k, batch_size, seed, path: init.PCAInitialization.get_decoder_init(X, k),
-        'admixture': lambda X, k, batch_size, seed, path: init.AdmixtureInitialization.get_decoder_init(X, k, path)
+        'admixture': lambda X, k, batch_size, seed, path: init.AdmixtureInitialization.get_decoder_init(X, k, path),
+        'pckmeans': lambda X, k, batch_size, seed, path: init.PCKMeans.get_decoder_init(X, k, path)
     }
     _optimizers = {
         'adam': lambda params, lr: optim.Adam(params, lr),

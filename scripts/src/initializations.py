@@ -41,7 +41,7 @@ class KMeansInitialization(object):
                 k_means_objs = [MiniBatchKMeans(n_clusters=i, batch_size=batch_size, random_state=seed, n_init=3, max_iter=3, compute_labels=False).fit(X)
                                 for i in k]
             else:
-                k_means_objs = [KMeans(n_clusters=i, random_state=42, n_init=3, max_iter=3, compute_labels=False).fit(X) for i in k]
+                k_means_objs = [KMeans(n_clusters=i, random_state=42, n_init=3, max_iter=3).fit(X) for i in k]
             if not use_logit:
                 return torch.cat([torch.tensor(obj.cluster_centers_) for obj in k_means_objs], axis=0).float()
             P_init = torch.clamp(torch.cat([torch.tensor(obj.cluster_centers_) for obj in k_means_objs], axis=0).float(),
@@ -163,3 +163,37 @@ class AdmixtureInitialization(object):
         assert P_init.size()[0] == K[0], 'Input P is not coherent with the value of K'
         log.info('Weights fetched.')
         return P_init
+
+class PCKMeans(object):
+    @classmethod
+    def get_decoder_init(cls, X, K, path):
+        log.info('Running PC-KMeans initialization...')
+        t0 = time.time()
+        try:
+            with open(path, 'rb') as fb:
+                pca_obj = pickle.load(fb)
+            log.info('PCA loaded.') 
+        except FileNotFoundError as fnfe:
+            log.info('PCA object not found. Performing PCA...')
+            pca_obj = PCA(n_components=2, random_state=42)
+            pca_obj.fit(X)
+            with open(path, 'wb') as fb:
+                pickle.dump(pca_obj, fb)
+        except Exception as e:
+            raise e
+        assert pca_obj.n_features_ == X.shape[1], 'Computed PCA and training data do not have same number of SNPs' 
+        log.info('Projecting data...')
+        X_pca = pca_obj.transform(X)
+        log.info('Running KMeans on projected data...')
+        if isinstance(K, Iterable):
+            k_means_objs = [KMeans(n_clusters=i, random_state=42, n_init=10, max_iter=10).fit(X_pca) for i in K]
+            centers = np.array([obj.cluster_centers_ for obj in k_means_objs])
+            P_init = torch.tensor(pca_obj.inverse_transform(centers), dtype=torch.float32).view(sum(K), -1)
+        else:
+            k_means_obj = KMeans(n_clusters=K, random_state=42, n_init=10, max_iter=10)
+            P_init = torch.tensor(pca_obj.inverse_transform(k_means_obj.cluster_centers_), dtype=torch.float32).view(K, -1)
+        te = time.time()
+        log.info('Weights initialized in {} seconds.'.format(te-t0))
+        return P_init
+        
+

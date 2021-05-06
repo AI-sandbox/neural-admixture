@@ -42,7 +42,9 @@ def fit_model(trX, valX, args, trY=None, valY=None):
     linear = bool(args.linear)
     freeze_decoder = bool(args.freeze_decoder)
     init_path = args.init_path
+    supervised = bool(args.supervised)
     Ks = [i for i in range(args.min_k, args.max_k+1)]
+    assert not supervised or (len(Ks) == 1 or not multihead), 'Supervised version is only available on a single head'
     assert dropout >= 0 and dropout <= 1, 'Dropout must be between 0 and 1'
     seed = args.seed
     display_logs = bool(args.display_logs)
@@ -74,7 +76,8 @@ def fit_model(trX, valX, args, trY=None, valY=None):
                                    encoder_activation=activation,
                                    dropout=dropout, pooling=pooling,
                                    linear=linear, hidden_size=hidden_size,
-                                   freeze_decoder=freeze_decoder)
+                                   freeze_decoder=freeze_decoder,
+                                   supervised=supervised)
     if torch.cuda.device_count() > 1:
         model = CustomDataParallel(model)
     model.to(device)
@@ -123,7 +126,7 @@ def main():
         return 1
     if not bool(args.wandb_log):
         return 0
-    pca_path = '/mnt/gpid08/users/albert.dominguez/data/chr22/pca_gen2_avg.pkl'
+    pca_path = '/mnt/gpid08/users/albert.dominguez/data/chr{}/pca_gen2_avg.pkl'.format(args.chr)
     try:
         with open(pca_path, 'rb') as fb:
             pca_obj = pickle.load(fb)

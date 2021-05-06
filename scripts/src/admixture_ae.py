@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import numpy as np
 import os
 import random
 import wandb
@@ -16,6 +17,7 @@ class ZeroOneClipper(object):
         if hasattr(module, 'weight'):
             w = module.weight.data
             w.clamp_(0.,1.)
+            w = w/w.sum(axis=1, keepdims=True)
 
 class ConstrainedLinear(torch.nn.Module):
     def __init__ (self, input_size, output_size, hard_init=None, bias=True): 
@@ -114,11 +116,21 @@ class AdmixtureAE(nn.Module):
             assert trY is not None and valY is not None and valX is not None, 'Labels are needed if plots are to be generated'
         log.info('{}oing to alternate between encoder and decoder.'.format('Not g' if optimizer_2 is None else 'G'))
         random.seed(seed)
+        loss_f_supervised = None
+        if self.supervised:
+            log.info('Going to train on supervised mode.')
+            assert trY is not None and valY is not None, 'Ground truth ancestries needed for supervised mode'
+            ancestry_dict = {anc: idx for idx, anc in enumerate(sorted(np.unique(trX)))}
+            assert len(ancestry_dict) == self.ks[0], 'Number of ancestries in training ground truth is not equal to the value of k'
+            to_idx_mapper = np.vectorize(lambda x: ancestry_dict[x])
+            trY_num = to_idx_mapper(trX)
+            valY_num = to_idx_mapper(trY)
+            loss_f_supervised = nn.CrossEntropyLoss(reduction='mean')
         for ep in range(num_epochs):
             if optimizer_2 is None or ep % 2 == 0:
-                tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, loss_weights, shuffle)
+                tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, loss_weights, shuffle, loss_f_supervised, trY_num, valY_num)
             else:
-                tr_loss, val_loss = self._run_epoch(trX, optimizer_2, loss_f, batch_size, valX, device, loss_weights, shuffle)
+                tr_loss, val_loss = self._run_epoch(trX, optimizer_2, loss_f, batch_size, valX, device, loss_weights, shuffle, loss_f_supervised, trY_num, valY_num)
             if run_name is not None and val_loss is not None:
                 wandb.log({"tr_loss": tr_loss, "val_loss": val_loss})
             elif run_name is not None:
@@ -137,20 +149,20 @@ class AdmixtureAE(nn.Module):
                                min_k=min(self.ks), max_k=max(self.ks), epoch=ep+1)
         return ep+1
 
-    def _batch_generator(self, X, batch_size=0, shuffle=False):
+    def _batch_generator(self, X, batch_size=0, shuffle=False, y=None):
         idxs = [i for i in range(X.shape[0])]
         if shuffle:
             random.shuffle(idxs)
         if batch_size < 1:
-            yield torch.tensor(X, dtype=torch.float32)
+            yield torch.tensor(X, dtype=torch.float32), torch.tensor(y, dtype=torch.int64) if y is not None else None
         else:
             for i in range(0, X.shape[0], batch_size):
-                yield torch.tensor(X[sorted(idxs[i:i+batch_size])], dtype=torch.float32)
+                yield torch.tensor(X[sorted(idxs[i:i+batch_size])], dtype=torch.float32), torch.tensor(y[sorted(idxs[i:i+batch_size])], dtype=torch.int64) if y is not None else None
 
-    def _validate(self, valX, loss_f, batch_size, device):
+    def _validate(self, valX, loss_f, batch_size, device, loss_f_supervised=None, valY=None):
         acum_val_loss = 0
         with torch.no_grad():
-            for X in self._batch_generator(valX, batch_size):
+            for X in self._batch_generator(valX, batch_size, y=valY):
                 X = X.to(device)
                 rec, _ = self(X)
                 acum_val_loss += loss_f(rec, X).item()
@@ -159,7 +171,8 @@ class AdmixtureAE(nn.Module):
         return acum_val_loss
 
         
-    def _run_step(self, X, optimizer, loss_f, loss_weights=None):
+    def _run_step(self, X, optimizer, loss_f, loss_weights=None,
+                  loss_f_supervised=None, trY=None):
         optimizer.zero_grad()
         rec, _ = self(X)
         if loss_weights is not None:
@@ -173,14 +186,16 @@ class AdmixtureAE(nn.Module):
         optimizer.step()
         return loss.item()
 
-    def _run_epoch(self, trX, optimizer, loss_f, batch_size, valX, device, loss_weights=None, shuffle=False):
+    def _run_epoch(self, trX, optimizer, loss_f, batch_size, valX,
+                   device, loss_weights=None, shuffle=False, loss_f_supervised=None,
+                   trY=None, valY=None):
         tr_loss, val_loss = 0, None
         self.train()
-        for X in self._batch_generator(trX, batch_size, shuffle=shuffle):
-            step_loss = self._run_step(X.to(device), optimizer, loss_f, loss_weights)
+        for X, y in self._batch_generator(trX, batch_size, shuffle=shuffle, y=trY if loss_f_supervised is not None else None):
+            step_loss = self._run_step(X.to(device), optimizer, loss_f, loss_weights, loss_f_supervised, y.to(device))
             tr_loss += step_loss
         if valX is not None:
             self.eval()
-            val_loss = self._validate(valX, loss_f, batch_size, device)
+            val_loss = self._validate(valX, loss_f, batch_size, device, loss_f_supervised, valY)
             return tr_loss / trX.shape[0], val_loss / valX.shape[0]
         return tr_loss / trX.shape[0], None

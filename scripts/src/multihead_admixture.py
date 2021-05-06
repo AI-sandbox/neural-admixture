@@ -12,13 +12,12 @@ class MultiHeadEncoder(nn.Module):
         assert sum([k < 2 for k in ks]) == 0, 'Invalid number of clusters. Requirement: k >= 2'
         self.ks = ks
         self.heads = nn.ModuleList([nn.Linear(input_size, k, bias=True) for k in ks])
-        self.softmax = nn.Softmax(dim=1)
 
     def _get_head_for_k(self, k):
         return self.heads[k-min(self.ks)]
 
     def forward(self, X):
-        outputs = [self.softmax(self._get_head_for_k(k)(X)) for k in self.ks]
+        outputs = [self._get_head_for_k(k)(X) for k in self.ks]
         return outputs
 
 
@@ -29,7 +28,7 @@ class MultiHeadDecoder(nn.Module):
         self.freeze = freeze
         if inits is None:
             self.decoders = nn.ModuleList(
-                [Linear(k, output_size, bias=bias) for k in self.ks]
+                [nn.Linear(k, output_size, bias=bias) for k in self.ks]
             )
             if self.freeze:
                 log.warn('Not going to freeze weights as no initialization was provided.')   
@@ -78,7 +77,7 @@ class AdmixtureMultiHead(AdmixtureAE):
     def __init__(self, ks, num_features, encoder_activation=nn.ReLU(),
                  P_init=None, batch_norm=False, batch_norm_hidden=False,
                  lambda_l2=0, dropout=0, pooling=1, linear=True,
-                 hidden_size=512, freeze_decoder=False):
+                 hidden_size=512, freeze_decoder=False, supervised=False):
         super().__init__()
         self.ks = ks
         self.num_features = num_features
@@ -86,6 +85,7 @@ class AdmixtureMultiHead(AdmixtureAE):
         self.encoder_activation = encoder_activation
         self.pooling_factor = pooling
         self.linear=linear
+        self.supervised = supervised
         self.freeze_decoder = freeze_decoder
         self.encoder_input_size = num_features//self.pooling_factor+1 if self.pooling_factor > 1 else num_features
         self.batch_norm = nn.BatchNorm1d(self.encoder_input_size) if batch_norm else None
@@ -93,6 +93,7 @@ class AdmixtureMultiHead(AdmixtureAE):
         self.pool = nn.AvgPool1d(self.pooling_factor, padding=self.pooling_factor//2) if self.pooling_factor > 1 else None
         self.dropout = nn.Dropout(dropout) if dropout > 0 else None
         self.lambda_l2 = lambda_l2 if lambda_l2 > 1e-6 else 0
+        self.softmax = nn.Softmax(dim=1)
         self.common_encoder = nn.Sequential(
                 nn.Linear(self.encoder_input_size, self.hidden_size, bias=True),
                 self.encoder_activation,
@@ -111,7 +112,7 @@ class AdmixtureMultiHead(AdmixtureAE):
     def _get_encoder_norm(self):
         return torch.norm(list(self.common_encoder.parameters())[0])
 
-    def forward(self, X):
+    def forward(self, X, only_assignments=False):
         if self.pool is not None:
             X = self.pool(X.view(-1,1,self.num_features)).view(-1,self.encoder_input_size)
         if self.batch_norm is not None:
@@ -123,16 +124,22 @@ class AdmixtureMultiHead(AdmixtureAE):
         if self.batch_norm_hidden is not None:
             enc = self.batch_norm_hidden(enc)
         hid_states = self.multihead_encoder(enc)
+        probs = [self.softmax(h) for h in hid_states]
+        if only_assignments:
+            return probs
         del enc
-        return self.decoders(hid_states), hid_states
+        return self.decoders(probs), hid_states
 
-    def _run_step(self, X, optimizer, loss_f, loss_weights=None):
+    def _run_step(self, X, optimizer, loss_f, loss_weights=None, loss_f_supervised=None, y=None):
         optimizer.zero_grad()
-        recs, _ = self(X)
+        recs, hid_states = self(X)
         if loss_weights is not None:
             loss = sum((loss_f(rec, X, loss_weights) for rec in recs)) if self.linear else loss_f(recs, X, loss_weights)
         else:
             loss = sum((loss_f(rec, X) for rec in recs)) if self.linear else loss_f(recs, X)
+        if loss_f_supervised is not None:  # Should only be used for a single-head architecture!
+            log.info('Supervised loss computation')
+            loss += sum((loss_f_supervised(h, y) for h in hid_states))
         if self.lambda_l2 > 1e-6:
             loss += self.lambda_l2*self._get_encoder_norm()**2
         del recs, _
@@ -142,13 +149,16 @@ class AdmixtureMultiHead(AdmixtureAE):
             self.decoders.decoders.apply(self.clipper)
         return loss.item()
     
-    def _validate(self, valX, loss_f, batch_size, device):
+    def _validate(self, valX, loss_f, batch_size, device, loss_f_supervised=None, y=None):
         acum_val_loss = 0
         with torch.no_grad():
-            for X in self._batch_generator(valX, batch_size):
+            for X, y_b in self._batch_generator(valX, batch_size, y=y if loss_f_supervised is not None else None):
                 X = X.to(device)
-                recs, _ = self(X)
+                y_b = y_b.to(device) if loss_f_supervised is not None else None
+                recs, hid_states = self(X)
                 acum_val_loss += sum((loss_f(rec, X).item() for rec in recs)) if self.linear else loss_f(recs, X).item()
+                if loss_f_supervised is not None:
+                    acum_val_loss += sum((loss_f_supervised(hid_states, y_b).item() for rec in recs))
             if self.lambda_l2 > 1e-6:
                 acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2
         return acum_val_loss
