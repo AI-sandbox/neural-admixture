@@ -74,7 +74,7 @@ def stacked_bar(data, series_labels, category_labels=None,
 def plot_pca_multihead(X_pca, y, model, k, Ks, pca, init=None, to_wandb=True):
     ancestries = sorted(np.unique(y).tolist())
     if init is None and model is not None:
-        P = torch.tensor([p for p in model.decoders.decoders[k-min(Ks)].parameters()][0]).detach().numpy()
+        P = [p for p in model.decoders.decoders[k-min(Ks)].parameters()][0].detach().numpy()
     elif init is not None:
         for i in range(k-min(Ks)+1):
             ini = end if i != 0 else 0
@@ -109,19 +109,19 @@ def generate_plots(model, trX, trY, valX, valY, device,
     model.eval()
     with torch.no_grad():
         tr_outs = []
-        for x in model._batch_generator(trX, batch_size):
+        for x, _ in model._batch_generator(trX, batch_size, y=None):
             if not is_multihead:
-                tr_outs.append(model(x.to(device))[1])
+                tr_outs.append(model(x.to(device), only_assignments=True))
             else:
-                tr_outs.append(model(x.to(device))[1][k-min_k])
+                tr_outs.append(model(x.to(device), only_assignments=True)[k-min_k])
         tr_outputs = torch.vstack(tr_outs).detach().cpu().numpy()
         del tr_outs
         val_outs = []
-        for x in model._batch_generator(valX, batch_size):
+        for x, _ in model._batch_generator(valX, batch_size, y=None):
             if not is_multihead:
-                val_outs.append(model(x.to(device))[1])
+                val_outs.append(model(x.to(device), only_assignments=True))
             else:
-                val_outs.append(model(x.to(device))[1][k-min_k])
+                val_outs.append(model(x.to(device), only_assignments=True)[k-min_k])
         val_outputs = torch.vstack(val_outs).detach().cpu().numpy()
         del val_outs
     ancestries = ['AFR', 'AMR', 'EAS', 'EUR', 'OCE', 'SAS', 'WAS']

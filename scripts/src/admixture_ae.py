@@ -120,11 +120,11 @@ class AdmixtureAE(nn.Module):
         if self.supervised:
             log.info('Going to train on supervised mode.')
             assert trY is not None and valY is not None, 'Ground truth ancestries needed for supervised mode'
-            ancestry_dict = {anc: idx for idx, anc in enumerate(sorted(np.unique(trX)))}
+            ancestry_dict = {anc: idx for idx, anc in enumerate(sorted(np.unique(trY)))}
             assert len(ancestry_dict) == self.ks[0], 'Number of ancestries in training ground truth is not equal to the value of k'
             to_idx_mapper = np.vectorize(lambda x: ancestry_dict[x])
-            trY_num = to_idx_mapper(trX)
-            valY_num = to_idx_mapper(trY)
+            trY_num = to_idx_mapper(trY[:])
+            valY_num = to_idx_mapper(valY[:])
             loss_f_supervised = nn.CrossEntropyLoss(reduction='mean')
         for ep in range(num_epochs):
             if optimizer_2 is None or ep % 2 == 0:

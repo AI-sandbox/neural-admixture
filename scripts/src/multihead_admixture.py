@@ -138,11 +138,10 @@ class AdmixtureMultiHead(AdmixtureAE):
         else:
             loss = sum((loss_f(rec, X) for rec in recs)) if self.linear else loss_f(recs, X)
         if loss_f_supervised is not None:  # Should only be used for a single-head architecture!
-            log.info('Supervised loss computation')
             loss += sum((loss_f_supervised(h, y) for h in hid_states))
         if self.lambda_l2 > 1e-6:
             loss += self.lambda_l2*self._get_encoder_norm()**2
-        del recs, _
+        del recs, hid_states
         loss.backward()
         optimizer.step()
         if self.linear:
@@ -158,7 +157,7 @@ class AdmixtureMultiHead(AdmixtureAE):
                 recs, hid_states = self(X)
                 acum_val_loss += sum((loss_f(rec, X).item() for rec in recs)) if self.linear else loss_f(recs, X).item()
                 if loss_f_supervised is not None:
-                    acum_val_loss += sum((loss_f_supervised(hid_states, y_b).item() for rec in recs))
+                    acum_val_loss += sum((loss_f_supervised(h, y_b).item() for h in hid_states))
             if self.lambda_l2 > 1e-6:
                 acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2
         return acum_val_loss
