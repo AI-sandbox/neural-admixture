@@ -110,11 +110,9 @@ class AdmixtureAE(nn.Module):
     def launch_training(self, trX, optimizer, loss_f, num_epochs,
                         device, batch_size=0, valX=None, display_logs=True,
                         loss_weights=None, save_every=10, save_path='../outputs/model.pt',
-                        run_name=None, plot_every=0, trY=None, valY=None, seed=42, shuffle=False,
-                        optimizer_2=None):
+                        run_name=None, plot_every=0, trY=None, valY=None, seed=42, shuffle=False):
         if plot_every != 0:
             assert trY is not None and valY is not None and valX is not None, 'Labels are needed if plots are to be generated'
-        log.info('{}oing to alternate between encoder and decoder.'.format('Not g' if optimizer_2 is None else 'G'))
         random.seed(seed)
         loss_f_supervised = None
         if self.supervised:

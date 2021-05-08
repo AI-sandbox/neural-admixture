@@ -37,7 +37,6 @@ def fit_model(trX, valX, args, trY=None, valY=None):
     multihead = args.multihead
     shuffle = args.shuffle
     pooling = args.pooling
-    alternate = bool(args.alternate)
     hidden_size = args.hidden_size
     linear = bool(args.linear)
     freeze_decoder = bool(args.freeze_decoder)
@@ -58,7 +57,7 @@ def fit_model(trX, valX, args, trY=None, valY=None):
     # Initialization
     log.info('Initializing...')
     if linear:
-        P_init = switchers['initializations'][decoder_init](trX, Ks if multihead else K, batch_size, seed, init_path)
+        P_init = switchers['initializations'][decoder_init](trX, trY, Ks if multihead else K, batch_size, seed, init_path)
     else:
         P_init = None
         log.info('Non-linear decoder weights will be randomly initialized.')
@@ -85,17 +84,7 @@ def fit_model(trX, valX, args, trY=None, valY=None):
         wandb.watch(model)
     
     # Optimizer
-    if alternate:
-        optimizer = switchers['optimizers'][optimizer_str]( # Encoder optimizer
-            list(model.batch_norm.parameters())+list(model.common_encoder.parameters())+list(model.multihead_encoder.parameters()),
-            learning_rate
-        )
-        optimizer_dec = switchers['optimizers'][optimizer_str]( # Decoder optimizer
-            model.decoders.parameters(),
-            learning_rate
-        )
-    else:
-        optimizer = switchers['optimizers'][optimizer_str](filter(lambda p: p.requires_grad, model.parameters()), learning_rate)
+    optimizer = switchers['optimizers'][optimizer_str](filter(lambda p: p.requires_grad, model.parameters()), learning_rate)
     log.info('Optimizer successfully loaded.')
     # Losses
     loss_f = switchers['losses'][loss](device, mask_frac)
@@ -108,7 +97,7 @@ def fit_model(trX, valX, args, trY=None, valY=None):
     actual_num_epochs = model.launch_training(trX, optimizer, loss_f, num_max_epochs, device, valX=valX,
                        batch_size=batch_size, loss_weights=loss_weights, display_logs=display_logs,
                        save_every=save_every, save_path=save_path, run_name=run_name, plot_every=0,
-                       trY=trY, valY=valY, shuffle=shuffle, seed=seed, optimizer_2=optimizer_dec if alternate else None)
+                       trY=trY, valY=valY, shuffle=shuffle, seed=seed)
     elapsed_time = t.stop()
     avg_time_per_epoch = elapsed_time/actual_num_epochs
     if log_to_wandb:

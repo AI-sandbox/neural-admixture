@@ -164,7 +164,7 @@ class AdmixtureInitialization(object):
         log.info('Weights fetched.')
         return P_init
 
-class PCKMeans(object):
+class PCKMeansInitialization(object):
     @classmethod
     def get_decoder_init(cls, X, K, path):
         log.info('Running PC-KMeans initialization...')
@@ -196,4 +196,21 @@ class PCKMeans(object):
         log.info('Weights initialized in {} seconds.'.format(te-t0))
         return P_init
         
-
+class SupervisedInitialization(object):
+    @classmethod
+    def get_decoder_init(cls, X, y, K):
+        log.info('Running supervised initialization...')
+        assert y is not None, 'Ground truth ancestries needed for supervised mode'
+        if len(K) > 1:
+            raise NotImplementedError
+        t0 = time.time()
+        k = K[0]
+        ancestry_dict = {anc: idx for idx, anc in enumerate(sorted(np.unique(y)))}
+        assert len(ancestry_dict) == k, 'Number of ancestries in training ground truth is not equal to the value of k'
+        to_idx_mapper = np.vectorize(lambda x: ancestry_dict[x])
+        y_num = to_idx_mapper(y[:])
+        X_mem = X[:,:]
+        P_init = torch.tensor(np.vstack([X_mem[y_num==idx,:].mean(axis=0) for idx in range(k)]), dtype=torch.float32)
+        te = time.time()
+        log.info('Weights initialized in {} seconds.'.format(te-t0))
+        return P_init

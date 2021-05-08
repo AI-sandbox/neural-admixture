@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument('--decoder_init', required=True, type=str, choices=['random', 'mean_SNPs', 'mean_random', 'kmeans',
                                                                             'kmeans_logit', 'minibatch_kmeans', 'minibatch_kmeans_logit',
                                                                             'kmeans++', 'binomial', 'pca', 'admixture',
-                                                                            'pckmeans'], help='Decoder initialization')
+                                                                            'pckmeans', 'supervised'], help='Decoder initialization')
     parser.add_argument('--loss', required=True, type=str, choices=['mse', 'bce', 'wbce', 'bce_mask', 'mse_mask', 'admixture'], help='Loss function to train')
     parser.add_argument('--mask_frac', required=False, type=float, help='%% of SNPs used in every step (only for masked BCE loss)')
     parser.add_argument('--optimizer', required=True, type=str, choices=['adam', 'sgd'], help='Optimizer')
@@ -35,7 +35,6 @@ def parse_args():
     parser.add_argument('--chr', required=True, type=str, choices=['1', '22', 'dogs'], help='Chromosome number to train on')
     parser.add_argument('--shuffle', required=True, type=int, choices=[0, 1], help='Whether to shuffle the training data at every epoch')
     parser.add_argument('--pooling', required=False, default=1, type=int, choices=range(1,11), help='Downsample fraction')
-    parser.add_argument('--alternate', required=True, default=0, type=int, choices=[0, 1], help='Whether to alternate between encoder or decoder optimization')
     parser.add_argument('--hidden_size', required=False, default=512, type=int, help='Hidden size in encoder and non-linear decoder')
     parser.add_argument('--linear', required=True, type=int, choices=[0, 1], help='Whether to use a linear decoder or not')
     parser.add_argument('--freeze_decoder', required=True, type=int, choices=[0, 1], help='Whether to freeze linear decoder weights')
