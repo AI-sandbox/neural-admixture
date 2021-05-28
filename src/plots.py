@@ -103,17 +103,14 @@ def plot_pca_multihead(X_pca, y, model, k, Ks, pca, init=None, to_wandb=True):
         plt.show()
 
 def generate_plots(model, trX, trY, valX, valY, device,
-                   batch_size, k=7, is_multihead=False,
-                   min_k=3, max_k=10, to_wandb=True, epoch=None,
-                   pca_obj=None, P_init=None, linear=True):
+                   batch_size, k=7, min_k=7, max_k=7,
+                   to_wandb=True, epoch=None, pca_obj=None,
+                   P_init=None, linear=True):
     model.eval()
     with torch.no_grad():
         tr_outs = []
         for x, _ in model._batch_generator(trX, batch_size, y=None):
-            if not is_multihead:
-                tr_outs.append(model(x.to(device), only_assignments=True))
-            else:
-                tr_outs.append(model(x.to(device), only_assignments=True)[k-min_k])
+            tr_outs.append(model(x.to(device), only_assignments=True)[k-min_k])
         tr_outputs = torch.vstack(tr_outs).detach().cpu().numpy()
         del tr_outs
         val_outs = []

@@ -187,7 +187,7 @@ class PCKMeansInitialization(object):
         log.info('Running KMeans on projected data...')
         if isinstance(K, Iterable):
             k_means_objs = [KMeans(n_clusters=i, random_state=42, n_init=10, max_iter=10).fit(X_pca) for i in K]
-            centers = np.array([obj.cluster_centers_ for obj in k_means_objs])
+            centers = np.concatenate([obj.cluster_centers_ for obj in k_means_objs])
             P_init = torch.tensor(pca_obj.inverse_transform(centers), dtype=torch.float32).view(sum(K), -1)
         else:
             k_means_obj = KMeans(n_clusters=K, random_state=42, n_init=10, max_iter=10)

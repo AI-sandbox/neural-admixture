@@ -54,7 +54,6 @@ def npy_to_vcf(reference, npy, output_file, filter_samples=None, filter_pos=None
     chmlen, _, _ = data["calldata/GT"].shape
     h, c = npy.shape
     n = h//2
-    assert chmlen == c, "reference (" + str(chmlen) + ") and numpy matrix (" + str(c) + ") not compatible"
 
     if filter_samples is not None:
         N = []
@@ -73,25 +72,28 @@ def npy_to_vcf(reference, npy, output_file, filter_samples=None, filter_pos=None
     else:
         data_samples = [get_name() for _ in range(n)]
         
-    if filter_pos is not None:
-        pos_filter_list = np.loadtxt(filter_pos)
-        pos_all = data["variants/POS"]
-        indx_pos = np.where(np.isin(pos_all, pos_filter_list))[0]
-        
-        chmlen = len(indx_pos)
-        c = len(indx_pos)
-        data["variants/CHROM"] = data["variants/CHROM"][indx_pos]
-        data["variants/POS"] = data["variants/POS"][indx_pos]
-        data["variants/ID"] = data["variants/ID"][indx_pos]
-        data["variants/REF"] = data["variants/REF"][indx_pos]
-        data["variants/ALT"] = data["variants/ALT"][indx_pos]
-        data["variants/QUAL"] = data["variants/QUAL"][indx_pos]
+    # if filter_pos is not None:
+        # pos_filter_list = np.loadtxt(filter_pos)
+        # pos_all = data["variants/POS"]
+        # indx_pos = np.where(np.isin(pos_all, pos_filter_list))[0]
+    indx_pos = np.arange(0,chmlen,5)
+    log.info(len(indx_pos))
+    chmlen = len(indx_pos)
+    c = len(indx_pos)
+    data["variants/CHROM"] = data["variants/CHROM"][indx_pos]
+    data["variants/POS"] = data["variants/POS"][indx_pos]
+    data["variants/ID"] = data["variants/ID"][indx_pos]
+    data["variants/REF"] = data["variants/REF"][indx_pos]
+    data["variants/ALT"] = data["variants/ALT"][indx_pos]
+    data["variants/QUAL"] = data["variants/QUAL"][indx_pos]
+    
+    assert chmlen == c, "reference (" + str(chmlen) + ") and numpy matrix (" + str(c) + ") not compatible"
 
 
-      
+    log.info('Filtered OK')
     log.info(data["variants/CHROM"])
     if 'chr' in data["variants/CHROM"][0]:
-        for j in range(len(data["variants/CHROM"])):
+        for j in len(data["variants/CHROM"]):
             data["variants/CHROM"][j] = data["variants/CHROM"][j].replace('chr', '')
 
     # metadata 
@@ -136,21 +138,22 @@ def npy_to_vcf(reference, npy, output_file, filter_samples=None, filter_pos=None
     return
 
 if __name__ == '__main__':
-    data_path = '/mnt/gpid08/users/albert.dominguez/data/chr22'
+    data_path = '/mnt/gpid08/users/albert.dominguez/data/chr1'
     ancestries = ['AFR', 'AMR', 'EAS', 'EUR', 'OCE', 'SAS', 'WAS']
-    which_set = 'valid'
-    window_size = 317408
-    log.info('Fetching SNPs arrays...')
-    for i, ancestry in enumerate(ancestries):
-        if i == 0:
-            npy = np.empty((0, window_size), int)
-        for i, snps_file in enumerate([f'{data_path}/{which_set}/{ancestry}/gen_0/mat_vcf_2d.npy', f'{data_path}/{which_set}/{ancestry}/gen_2/mat_vcf_2d.npy']):
-            aux = np.load(snps_file, mmap_mode='r')[:,:window_size]
-            npy = np.vstack((npy, aux))
-            del aux
-            gc.collect()
-        log.info(f'{ancestry} SNPs fetched.')
-    log.info('All SNPs fetched.')
-    reference = f'{data_path}/ref_final_beagle_phased_1kg_hgdp_sgdp_chr22_hg19.vcf.gz'
-    results_file = f'{data_path}/{which_set}/{window_size}.vcf'
-    npy_to_vcf(reference, npy, results_file, filter_samples=None, filter_pos=None, verbose=True)
+    which_sets = ['train', 'valid']
+    window_size = 362605
+    for which_set in which_sets:
+        log.info(f'Fetching {which_set} SNPs arrays...')
+        for i, ancestry in enumerate(ancestries):
+            if i == 0:
+                npy = np.empty((0, window_size), int)
+            for i, snps_file in enumerate([f'{data_path}/{which_set}/{ancestry}/gen_0/mat_vcf_2d.npy']):
+                aux = np.load(snps_file, mmap_mode='r')[:,::5]
+                npy = np.vstack((npy, aux))
+                del aux
+                gc.collect()
+            log.info(f'{ancestry} SNPs fetched.')
+        log.info('All SNPs fetched.')
+        reference = f'{data_path}/ref_final_beagle_phased_1kg_hgdp_sgdp_chr1_hg19.vcf.gz'
+        results_file = f'{data_path}/{which_set}/founders.vcf'
+        npy_to_vcf(reference, npy, results_file, filter_samples=None, filter_pos=None, verbose=True)
