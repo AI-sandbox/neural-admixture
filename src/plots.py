@@ -115,10 +115,7 @@ def generate_plots(model, trX, trY, valX, valY, device,
         del tr_outs
         val_outs = []
         for x, _ in model._batch_generator(valX, batch_size, y=None):
-            if not is_multihead:
-                val_outs.append(model(x.to(device), only_assignments=True))
-            else:
-                val_outs.append(model(x.to(device), only_assignments=True)[k-min_k])
+            val_outs.append(model(x.to(device), only_assignments=True)[k-min_k])
         val_outputs = torch.vstack(val_outs).detach().cpu().numpy()
         del val_outs
     ancestries = ['AFR', 'AMR', 'EAS', 'EUR', 'OCE', 'SAS', 'WAS']
