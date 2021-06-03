@@ -10,6 +10,13 @@ class Switchers(object):
         'tanh': lambda x: nn.Tanh()
     }
 
+
+    _data = {
+        'CHM-1': lambda path: (f'{path}/CHM-1/train.h5', f'{path}/CHM-1/validation.h5'),
+        'CHM-22': lambda path: (f'{path}/CHM-22/train.h5', f'{path}/CHM-22/validation.h5'),
+        'CHM-22-SIM': lambda path: (f'{path}/CHM-22-SIM/train.h5', f'{path}/CHM-22-SIM/validation.h5')
+    }
+
     _initializations = {
         'random': lambda X, y, k, batch_size, seed, path: None,
         'mean_SNPs': lambda X, y, k, batch_size, seed, path: init.SNPsMeanInitialization.get_decoder_init(X, k),
@@ -33,6 +40,7 @@ class Switchers(object):
     def get_switchers(cls):
         return {
             'activations': cls._activations,
+            'data': cls._data,
             'initializations': cls._initializations,
             'optimizers': cls._optimizers
         }

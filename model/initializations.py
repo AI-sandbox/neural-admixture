@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 class KMeansInitialization(object):
     @classmethod
-    def get_decoder_init(cls, X, k, minibatch, use_logit, batch_size=200, seed=42, path='/mnt/gpid08/users/albert.dominguez/weights/chr22/minibatch_kmeans_2gens_3init_3iter.pt'):
+    def get_decoder_init(cls, X, k, minibatch, use_logit, batch_size=200, seed=42, path=''):
         if minibatch and use_logit:
             if os.path.exists(path):
                 log.info('Loading k-means cluster centroids from precomputed tensor.')
@@ -58,7 +58,7 @@ class KMeansInitialization(object):
 
 class KMeansPlusPlusInitialization(object):
     @classmethod
-    def get_decoder_init(cls, X, k, seed=42, path='/mnt/gpid08/users/albert.dominguez/weights/chr22/kmeans++_2gens_avg.pt'):
+    def get_decoder_init(cls, X, k, seed=42, path=''):
         if os.path.exists(path):
             log.info('Loading k-means++ centroids from precomputed tensor.')
             return torch.load(path)
@@ -101,7 +101,7 @@ class SNPsMeanInitialization(object):
 
 class BinomialInitialization(object):
     @classmethod
-    def get_decoder_init(cls, X, K, path='/mnt/gpid08/users/albert.dominguez/weights/chr1/binomial_2gens_unlinked.pt'):
+    def get_decoder_init(cls, X, K, path=''):
         if os.path.exists(path):
             log.info('Loading binomial initialization from precomputed tensor.')
             return torch.load(path)
@@ -115,7 +115,7 @@ class BinomialInitialization(object):
 
 class PCAInitialization(object):
     @classmethod
-    def get_decoder_init(cls, X, K, path='/mnt/gpid08/users/albert.dominguez/data/chr22/pca_gen2_avg.pkl'):
+    def get_decoder_init(cls, X, K, path=''):
         if len(K) > 1:
             raise NotImplementedError
         k = K[0]

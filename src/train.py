@@ -7,7 +7,6 @@ import sys
 import torch
 import torch.nn as nn
 import utils
-import uuid
 import wandb
 sys.path.append('..')
 from model.neural_admixture import NeuralAdmixture
@@ -35,16 +34,21 @@ def fit_model(trX, valX, args, trY=None, valY=None):
     freeze_decoder = bool(args.freeze_decoder)
     init_path = args.init_path
     supervised = bool(args.supervised)
+    name = args.name
+    dataset = bool(args.dataset)
     Ks = [i for i in range(args.min_k, args.max_k+1)]
-    assert not (supervised and len(Ks) != 1), 'Supervised version is only available on a single head'
+    assert not (supervised and len(Ks) != 1), 'Supervised version is currently only available on a single head'
     seed = args.seed
     display_logs = bool(args.display_logs)
     log_to_wandb = bool(args.wandb_log)
     log.info(f'Job args: {args}')
     log.info('Using {} GPU(s)'.format(torch.cuda.device_count()) if torch.cuda.is_available() else 'No GPUs available.')
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    save_path = '{}/{}.pt'.format(save_dir, uuid.uuid4().hex)
-    run_name = utils.initialize_wandb(log_to_wandb, trX, valX, args, save_path)
+    if name is not None:
+        run_name = name
+    else:
+        run_name = utils.initialize_wandb(log_to_wandb, trX, valX, args, save_path)
+    save_path = '{}/{}.pt'.format(save_dir, run_name)
     torch.manual_seed(seed)
     # Initialization
     log.info('Initializing...')
@@ -92,26 +96,31 @@ def fit_model(trX, valX, args, trY=None, valY=None):
 
 def main():
     args = utils.parse_args()
-    trX, trY, valX, valY = utils.read_data(args.chr)
+    switchers = Switchers.get_switchers()
+    tr_file, val_file = switchers['data'][args.dataset](args.data_path)
+    trX, trY, valX, valY = utils.read_data(tr_file, val_file)
     model, P_init, device = fit_model(trX, valX, args, trY, valY)
     if model is None:
         return 1
-    if not bool(args.wandb_log):
-        return 0
-    pca_path = '/mnt/gpid08/users/albert.dominguez/data/chr{}/pca_gen2_avg.pkl'.format(args.chr)
-    try:
-        with open(pca_path, 'rb') as fb:
-            pca_obj = pickle.load(fb)
-    except FileNotFoundError as fnf:
-        log.exception(fnf)
+    pca_path = args.pca_path
+    pca_obj = None
+    if bool(args.wandb_log):
+        try:
+            with open(pca_path, 'rb') as fb:
+                pca_obj = pickle.load(fb)
+        except FileNotFoundError as fnf:
+            log.exception(fnf)
+            pca_obj = None
+            pass
+    else:
         pca_obj = None
-        pass
     return plots.generate_plots(model, trX, trY, valX, valY, device,
                                 args.batch_size, k=args.plot_k,
                                 to_wandb=bool(args.wandb_log),
                                 min_k=args.min_k, max_k=args.max_k,
                                 P_init=P_init, pca_obj=pca_obj,
-                                linear=args.linear)
+                                linear=args.linear, fname=args.name,
+                                data_path=args.data_path, dataset=args.dataset)
 
 if __name__ == '__main__':
     sys.exit(main())

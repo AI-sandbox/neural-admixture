@@ -1,11 +1,42 @@
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import torch
 import wandb
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.metrics import adjusted_mutual_info_score
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
+
+def print_losses(model, data, Qs_adm, Ps_adm, device, loss_f=torch.nn.BCELoss(reduction='sum')):
+    preds_adm = Qs_adm@Ps_adm
+    loss_class = 0
+    loss_neural = 0 
+    model.eval()
+    with torch.no_grad():
+        for i, (X, _) in enumerate(model._batch_generator(data, 200, shuffle=False)):
+            X = X.to(device)
+            recs, _ = model(X)
+            loss_neural += loss_f(X, recs[0]).item()
+            loss_class += loss_f(X, torch.tensor(preds_adm[200*i:200*i+200], dtype=torch.float, device=device)).item()
+            del recs
+    log.info('Classical loss: {:e}'.format(loss_class))
+    log.info('Neural ADMIXTURE loss: {:e}'.format(loss_neural))
+    log.info('------------------------------------------------------')
+
+def output_metrics(gt, preds_class, preds_neur):
+    assert len(gt) == len(preds_class) == len(preds_neur), 'GT and predictions do not have same number of samples'
+    class_assign = np.argmax(preds_class, axis=1)
+    neur_assign = np.argmax(preds_neur, axis=1)
+    gt_oh = OneHotEncoder().fit_transform(gt.reshape(-1,1))
+    log.info('Classical Mean Squared Second Order Difference (MSSOD): {}'.format(((preds_class@preds_class.T-gt_oh@gt_oh.T)**2).mean()))
+    log.info('Neural Mean Squared Second Order Difference (MSSOD): {}'.format(((preds_neur@preds_neur.T-gt_oh@gt_oh.T)**2).mean()))
+    log.info('------------------------------------------------------')
+    log.info('Classical Adjusted Mutual Information score: {}'.format(adjusted_mutual_info_score(gt, class_assign)))
+    log.info('Neural Adjusted Mutual Information score: {}'.format(adjusted_mutual_info_score(gt, neur_assign)))
+    log.info('------------------------------------------------------')
 
 def stacked_bar(data, series_labels, category_labels=None, 
                 show_values=False, value_format="{}", y_label=None, 
@@ -105,7 +136,8 @@ def plot_pca_multihead(X_pca, y, model, k, Ks, pca, init=None, to_wandb=True):
 def generate_plots(model, trX, trY, valX, valY, device,
                    batch_size, k=7, min_k=7, max_k=7,
                    to_wandb=True, epoch=None, pca_obj=None,
-                   P_init=None, linear=True):
+                   P_init=None, linear=True, fname='',
+                   data_path='', dataset=''):
     model.eval()
     with torch.no_grad():
         tr_outs = []
@@ -135,8 +167,8 @@ def generate_plots(model, trX, trY, valX, valY, device,
             wandb.log({"Training results": wandb.Image(plt)})
         else:
             wandb.log({"Training results (epoch {})".format(epoch): wandb.Image(plt)})   
-    else:
-        plt.show()
+    elif fname != '':
+        plt.savefig(f'../outputs/figures/{fname}_training_barplot.png')
     log.info('Rendering validation barplot...')
     plt.figure(figsize=(20,6))
     plt.subplots_adjust(wspace=0, hspace=0)
@@ -152,9 +184,9 @@ def generate_plots(model, trX, trY, valX, valY, device,
             wandb.log({"Validation results": wandb.Image(plt)})
         else:
             wandb.log({"Validation results (epoch {})".format(epoch): wandb.Image(plt)})   
-    else:
-        plt.show()
-    if linear:
+    elif fname != '':
+        plt.savefig(f'../outputs/figures/{fname}_validation_barplot.png')
+    if linear and to_wandb:
         log.info('Rendering PCA plots...')
         try:
             model.to(torch.device('cpu'))
@@ -166,5 +198,16 @@ def generate_plots(model, trX, trY, valX, valY, device,
             log.exception(e)
             log.warn('Could not render PCA plots.')
             pass
+    elif linear and fname and data_path and dataset:
+        name = fname[:6] if 'PRETRAINED' in fname.upper() else fname
+        log.info('Computing training metrics...')
+        Qs_adm_tr = pd.read_csv(f'{data_path}/{dataset}/{name}_classic_train.Q', sep=' ', names=np.array(range(7))).to_numpy()
+        Ps_adm_tr = 1-pd.read_csv(f'{data_path}/{dataset}/{name}_classic_train.P', sep=' ', names=np.array(range(7))).to_numpy().T
+        output_metrics(trY[:], Qs_adm_tr, tr_outputs)
+        log.info('Computing validation metrics...')
+        Qs_adm_val = pd.read_csv(f'{data_path}/{dataset}/{name}_classic_valid.Q', sep=' ', names=np.array(range(7))).to_numpy()
+        Ps_adm_val = 1-pd.read_csv(f'{data_path}/{dataset}/{name}_classic_valid.P', sep=' ', names=np.array(range(7))).to_numpy().T
+        print_losses(model, valX, Qs_adm_val, Ps_adm_val, device)
+        output_metrics(valY[:], Qs_adm_val, val_outputs)
     log.info('Done!')
     return 0
