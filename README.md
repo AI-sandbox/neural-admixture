@@ -1,8 +1,8 @@
 # Neural ADMIXTURE: Population Clustering with Autoencoders
 
-## Replications instructions for CHM-22
+## Replication instructions for chromosome 22
 
-We provide a simple step-by-step guide to train an unsupervised, pretrained and supervised version of Neural ADMIXTURE for the dataset CHM-22, with the same settings as in the paper. Other datasets have been avoided to avoid size issues.
+We provide a simple step-by-step guide to train an unsupervised, pretrained and supervised version of Neural ADMIXTURE for the dataset CHM-22, with the same settings as in the paper. Other datasets have been avoided to avoid data size issues for hosting.
 
 Note that results may differ by a very small amount with those presented due to the hardware used. Moreover, if a GPU is to be used (which we recommend), it needs to have at least 12GB of memory.
 
