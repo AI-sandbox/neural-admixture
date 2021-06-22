@@ -4,7 +4,7 @@ import numpy as np
 import random
 import torch
 import torch.nn as nn
-# import wandb
+import wandb
 from .modules import NeuralDecoder, NeuralEncoder, ZeroOneClipper
 
 logging.basicConfig(level=logging.INFO)
@@ -53,7 +53,7 @@ class NeuralAdmixture(nn.Module):
     def launch_training(self, trX, optimizer, loss_f, num_epochs,
                         device, batch_size=0, valX=None, display_logs=True,
                         save_every=10, save_path='../outputs/model.pt',
-                        run_name=None, plot_every=0, trY=None, valY=None, seed=42, shuffle=False):
+                        run_name=None, plot_every=0, trY=None, valY=None, seed=42, shuffle=False, log_to_wandb=False):
         if plot_every != 0:
             assert trY is not None and valY is not None and valX is not None, 'Labels are needed if plots are to be generated'
         random.seed(seed)
@@ -69,10 +69,10 @@ class NeuralAdmixture(nn.Module):
             loss_f_supervised = nn.CrossEntropyLoss(reduction='mean')
         for ep in range(num_epochs):
             tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, shuffle, loss_f_supervised, trY_num, valY_num)
-            # if run_name is not None and val_loss is not None:
-            #     wandb.log({"tr_loss": tr_loss, "val_loss": val_loss})
-            # elif run_name is not None:
-            #     wandb.log({"tr_loss": tr_loss})
+            if log_to_wandb:
+                wandb.log({"tr_loss": tr_loss, "val_loss": val_loss})
+            elif run_name is not None:
+                wandb.log({"tr_loss": tr_loss})
             assert not math.isnan(tr_loss), 'Training loss is NaN'
             if display_logs:
                 log.info(f'[METRICS] EPOCH {ep+1}: mean training loss: {tr_loss}')
