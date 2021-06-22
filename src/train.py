@@ -12,6 +12,7 @@ sys.path.append('..')
 from model.neural_admixture import NeuralAdmixture
 from codetiming import Timer
 from parallel import CustomDataParallel
+from pathlib import Path
 from switchers import Switchers
 
 logging.basicConfig(level=logging.INFO)
@@ -35,19 +36,18 @@ def fit_model(trX, valX, args, trY=None, valY=None):
     init_path = args.init_path
     supervised = bool(args.supervised)
     name = args.name
-    dataset = bool(args.dataset)
     Ks = [i for i in range(args.min_k, args.max_k+1)]
     assert not (supervised and len(Ks) != 1), 'Supervised version is currently only available on a single head'
     seed = args.seed
     display_logs = bool(args.display_logs)
     log_to_wandb = bool(args.wandb_log)
+    Path(save_dir).mkdir(parents=True, exist_ok=True)
     log.info(f'Job args: {args}')
     log.info('Using {} GPU(s)'.format(torch.cuda.device_count()) if torch.cuda.is_available() else 'No GPUs available.')
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    if name is not None:
-        run_name = name
-    else:
-        run_name = utils.initialize_wandb(log_to_wandb, trX, valX, args, save_path)
+    run_name = name
+    if log_to_wandb:
+        utils.initialize_wandb(run_name, trX, valX, args, save_dir)
     save_path = '{}/{}.pt'.format(save_dir, run_name)
     torch.manual_seed(seed)
     # Initialization
@@ -84,9 +84,8 @@ def fit_model(trX, valX, args, trY=None, valY=None):
     actual_num_epochs = model.launch_training(trX, optimizer, loss_f, num_max_epochs, device, valX=valX,
                        batch_size=batch_size, display_logs=display_logs, save_every=save_every,
                        save_path=save_path, run_name=run_name, plot_every=0,
-                       trY=trY, valY=valY, shuffle=shuffle, seed=seed)
+                       trY=trY, valY=valY, shuffle=shuffle, seed=seed, log_to_wandb=log_to_wandb)
     elapsed_time = t.stop()
-    avg_time_per_epoch = elapsed_time/actual_num_epochs
     if log_to_wandb:
         wandb.run.summary['total_elapsed_time'] = elapsed_time
         wandb.run.summary['avg_epoch_time'] = elapsed_time/actual_num_epochs
@@ -97,7 +96,10 @@ def fit_model(trX, valX, args, trY=None, valY=None):
 def main():
     args = utils.parse_args()
     switchers = Switchers.get_switchers()
-    tr_file, val_file = switchers['data'][args.dataset](args.data_path)
+    if args.dataset is not None:
+        tr_file, val_file = switchers['data'][args.dataset](args.data_path)
+    else:
+        tr_file, val_file = f'{args.data_path}/train.h5', f'{args.data_path}/validation.h5'
     trX, trY, valX, valY = utils.read_data(tr_file, val_file)
     model, P_init, device = fit_model(trX, valX, args, trY, valY)
     if model is None:
@@ -108,8 +110,8 @@ def main():
         try:
             with open(pca_path, 'rb') as fb:
                 pca_obj = pickle.load(fb)
-        except FileNotFoundError as fnf:
-            log.exception(fnf)
+        except Exception as e:
+            log.warn('Will not display projected centroids due to error loading the PCA.')
             pca_obj = None
             pass
     else:
