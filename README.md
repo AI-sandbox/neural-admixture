@@ -3,6 +3,10 @@
 ![multi_head_arch](https://user-images.githubusercontent.com/31998088/123008111-99a46e00-d3ba-11eb-8ced-d394ef903487.png)
 
 
+## Command Line Interface
+
+A command line interface with a similar input/output as the original ADMIXTURE will be released shortly, stay tuned!
+
 ## Requirements
 
 We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `conda`), and then install the requirements there. As an example, for `virtualenv`, one should launch the following commands:
