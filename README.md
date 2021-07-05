@@ -46,7 +46,7 @@ We provide a simple step-by-step guide to train an unsupervised, pretrained and 
 
 If a GPU is to be used for training (which we recommend), it needs to have at least 12GB of memory.
 
-The data can be downloaded from [this link](https://www.dropbox.com/s/6z5ln682qz6jels6/chm-22.tar.gz?dl=0). It is a compressed file containing the data of CHM-22, as well as results from classical ADMIXTURE experiments. Extract its content in the root directory. Check that the folder `data/CHM-22` contains these 10 files:
+The data can be downloaded from [this link](https://www.dropbox.com/s/6z5ln82qz6jels6/chm-22.tar.gz?dl=0). It is a compressed file containing the data of CHM-22, as well as results from classical ADMIXTURE experiments. Extract its content in the root directory. Check that the folder `data/CHM-22` contains these 10 files:
 
 ```sh
 - CHM-22_classic_train.P  # ADMIXTURE output
