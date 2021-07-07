@@ -3,6 +3,10 @@
 ![multi_head_arch](https://user-images.githubusercontent.com/31998088/123008111-99a46e00-d3ba-11eb-8ced-d394ef903487.png)
 
 
+## Command Line Interface
+
+A command line interface with a similar input/output as the original ADMIXTURE will be released shortly, stay tuned!
+
 ## Requirements
 
 We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `conda`), and then install the requirements there. As an example, for `virtualenv`, one should launch the following commands:
@@ -42,7 +46,7 @@ We provide a simple step-by-step guide to train an unsupervised, pretrained and 
 
 If a GPU is to be used for training (which we recommend), it needs to have at least 12GB of memory.
 
-The data can be downloaded from [this link](https://www.dropbox.com/s/6z5ln682qz6jels6/chm-22.tar.gz?dl=0). It is a compressed file containing the data of CHM-22, as well as results from classical ADMIXTURE experiments. Extract its content in the root directory. Check that the folder `data/CHM-22` contains these 10 files:
+The data can be downloaded from [this link](https://www.dropbox.com/s/6z5ln82qz6jels6/chm-22.tar.gz?dl=0). It is a compressed file containing the data of CHM-22, as well as results from classical ADMIXTURE experiments. Extract its content in the root directory. Check that the folder `data/CHM-22` contains these 10 files:
 
 ```sh
 - CHM-22_classic_train.P  # ADMIXTURE output
@@ -93,3 +97,21 @@ Note that results may differ by a very small amount with those presented due to 
 ## License
 
 **NOTICE**: This software is available for use free of charge for academic research use only. Academic users may fork this repository and modify and improve to suit their research needs, but also inherit these terms and must include a licensing notice to that effect. Commercial users, for profit companies or consultants, and non-profit institutions not qualifying as "academic research" should contact the authors for a separate license. This applies to this repository directly and any other repository that includes source, executables, or git commands that pull/clone this repository as part of its function. Such repositories, whether ours or others, must include this notice.
+
+## Cite
+
+When using this software, please cite the following paper (currently pre-print):
+
+```{tex}
+@article {Mantes2021.06.27.450081,
+	author = {Mantes, Albert Dominguez and Montserrat, Daniel Mas and Bustamante, Carlos and Giró-i-Nieto, Xavier and Ioannidis, Alexander G},
+	title = {Neural ADMIXTURE: rapid population clustering with autoencoders},
+	elocation-id = {2021.06.27.450081},
+	year = {2021},
+	doi = {10.1101/2021.06.27.450081},
+	publisher = {Cold Spring Harbor Laboratory},
+	abstract = {Characterizing the genetic substructure of large cohorts has become increasingly important as genetic association and prediction studies are extended to massive, increasingly diverse, biobanks. ADMIXTURE and STRUCTURE are widely used unsupervised clustering algorithms for characterizing such ancestral genetic structure. These methods decompose individual genomes into fractional cluster assignments with each cluster representing a vector of DNA marker frequencies. The assignments, and clusters, provide an interpretable representation for geneticists to describe population substructure at the sample level. However, with the rapidly increasing size of population biobanks and the growing numbers of variants genotyped (or sequenced) per sample, such traditional methods become computationally intractable. Furthermore, multiple runs with different hyperparameters are required to properly depict the population clustering using these traditional methods, increasing the computational burden. This can lead to days of compute. In this work we present Neural ADMIXTURE, a neural network autoencoder that follows the same modeling assumptions as ADMIXTURE, providing similar (or better) clustering, while reducing the compute time by orders of magnitude. In addition, this network can include multiple outputs, providing the equivalent results as running the original ADMIXTURE algorithm many times with different numbers of clusters. These models can also be stored, allowing later cluster assignment to be performed with a linear computational time.Competing Interest StatementThe authors have declared no competing interest.},
+	URL = {https://www.biorxiv.org/content/early/2021/06/28/2021.06.27.450081},
+	eprint = {https://www.biorxiv.org/content/early/2021/06/28/2021.06.27.450081.full.pdf},
+	journal = {bioRxiv}
+}
