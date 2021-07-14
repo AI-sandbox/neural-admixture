@@ -85,7 +85,7 @@ def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
         log.info('Reading data...')
         f_tr = allel.read_vcf(tr_file)
         log.info('Processing data...')
-        tr_snps = np.sum(f_tr['calldata/GT'], axis=2).T
+        tr_snps = np.sum(f_tr['calldata/GT'], axis=2).T/2
     else:
         log.error('Unrecognized file format. Make sure file ends with .h5, .hdf5, .vcf or .vcf.gz .')
         sys.exit(1)
@@ -101,7 +101,7 @@ def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
             log.info('Reading validation data...')
             f_val = allel.read_vcf(val_file)
             log.info('Processing validation data...')
-            val_snps = np.sum(f_val['calldata/GT'], axis=2).T
+            val_snps = np.sum(f_val['calldata/GT'], axis=2).T/2
         else:
             log.error('Unrecognized validation file format. Make sure file ends with .h5, .hdf5, .vcf or .vcf.gz .')
             sys.exit(1)
