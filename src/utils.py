@@ -60,7 +60,7 @@ def initialize_wandb(run_name, trX, valX, args, out_path, silent=True):
                settings=wandb.Settings(start_method='fork')
             )
     wandb.config.update({'train_samples': trX.shape[0],
-                         'val_samples': valX.shape[0],
+                         'val_samples': valX.shape[0] if valX is not None else '',
                          'SNPs': trX.shape[1],
                          'out_path': out_path,
                          'averaged_parents': True,
