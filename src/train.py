@@ -91,38 +91,22 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
         wandb.run.summary['avg_epoch_time'] = elapsed_time/actual_num_epochs
     torch.save(model.state_dict(), save_path)
     log.info('Fit done.')
-    return model, P_init, device
+    return model, device
 
 def main():
     args = utils.parse_args()
     switchers = Switchers.get_switchers()
     if args.dataset is not None:
         tr_file, val_file = switchers['data'][args.dataset](args.data_path)
+        tr_pops_f, val_pops_f = '', ''
     else:
-        tr_file, val_file = f'{args.data_path}/train.h5', f'{args.data_path}/validation.h5'
-    trX, trY, valX, valY = utils.read_data(tr_file, val_file)
-    model, P_init, device = fit_model(trX, args, valX, trY, valY)
-    if model is None:
-        return 1
-    pca_path = args.pca_path
-    pca_obj = None
-    if bool(args.wandb_log):
-        try:
-            with open(pca_path, 'rb') as fb:
-                pca_obj = pickle.load(fb)
-        except Exception as e:
-            log.warn('Will not display projected centroids due to error loading the PCA.')
-            pca_obj = None
-            pass
-    else:
-        pca_obj = None
-    return plots.generate_plots(model, trX, trY, valX, valY, device,
-                                args.batch_size, k=args.plot_k,
-                                to_wandb=bool(args.wandb_log),
-                                min_k=args.min_k, max_k=args.max_k,
-                                P_init=P_init, pca_obj=pca_obj,
-                                linear=args.linear, fname=args.name,
-                                data_path=args.data_path, dataset=args.dataset)
+        tr_file, val_file = args.data_path, args.validation_data_path
+        tr_pops_f, val_pops_f = args.populations_path, args.validation_populations_path
+
+    trX, trY, valX, valY = utils.read_data(tr_file, val_file, tr_pops_f, val_pops_f)
+    model, device = fit_model(trX, args, valX, trY, valY)
+    utils.write_outputs(model, trX, valX, args.batch_size, device, args.name, args.save_dir)
+    return 0
 
 if __name__ == '__main__':
     sys.exit(main())

@@ -19,8 +19,7 @@ We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `con
 
 ## Training from scratch
 
-The HDF5 files containing the train and validation datasets must be placed in the data path passed as an argument, and they must be named `train.h5` and `validation.h5` respectively.
-To train a model from scratch, simply invoke the following commands inside the `src` directory. For more info about all the arguments, please run `python3 train.py --help`. If training a single-head version of the network suffices, please set `min_k` and `max_k` to the same value (K).
+To train a model from scratch, simply invoke the following commands inside the `src` directory. For more info about all the arguments, please run `python3 train.py --help`. If training a single-head version of the network suffices, please set `min_k` and `max_k` to the same value (K). Note that only HDF5 and VCF files are supported as of now.
 
 For unsupervised Neural ADMIXTURE:
 

@@ -2,8 +2,10 @@ import allel
 import argparse
 import h5py
 import logging
+import numpy as np
 import os
 import sys
+import torch
 import wandb
 
 logging.basicConfig(level=logging.INFO)
@@ -36,7 +38,10 @@ def parse_args():
     parser.add_argument('--plot_k', required=False, default=7, type=int, help='Value of K used for the post-training plots')
     parser.add_argument('--name', required=False, type=str, help='Experiment name (will be used for output filenames)')
     parser.add_argument('--dataset', required=False, type=str, help='Dataset to be used (to replicate experiments)')
-    parser.add_argument('--data_path', required=False, type=str, help='Path containing the data')
+    parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data')
+    parser.add_argument('--validation_data_path', required=False, default='', type=str, help='Path containing the validation data')
+    parser.add_argument('--populations_path', required=False, default='', type=str, help='Path containing the main data populations')
+    parser.add_argument('--validation_populations_path', required=False, default='', type=str, help='Path containing the validation data populations')
     parser.add_argument('--wandb_user', required=False, type=str, help='wandb user')
     parser.add_argument('--wandb_project', required=False, type=str, help='wandb project')
     parser.add_argument('--pca_path', required=False, type=str, help='Path containing PCA object, used for plots')
@@ -77,44 +82,76 @@ def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
         tr_snps = f_tr['snps']
     elif tr_file.endswith('.vcf') or tr_file.endswith('.vcf.gz'):
         log.info('Input format is VCF.')
-        log.info('Reading...')
+        log.info('Reading data...')
         f_tr = allel.read_vcf(tr_file)
-        log.info('Processing...')
-        tr_snps = np.sum(vcf_f['calldata/GT'], axis=2).T
+        log.info('Processing data...')
+        tr_snps = np.sum(f_tr['calldata/GT'], axis=2).T
     else:
         log.error('Unrecognized file format. Make sure file ends with .h5, .hdf5, .vcf or .vcf.gz .')
         sys.exit(1)
 
     # Validation data
-    if val_file is not None:
+    if val_file:
         if val_file.endswith('.h5') or val_file.endswith('.hdf5'):
             log.info('Validation input format is HDF5.')
             f_val = h5py.File(val_file, 'r')
             val_snps = f_val['snps']
         elif val_file.endswith('.vcf') or val_file.endswith('.vcf.gz'):
             log.info('Input format is VCF.')
-            log.info('Reading...')
+            log.info('Reading validation data...')
             f_val = allel.read_vcf(val_file)
-            log.info('Processing...')
-            val_snps = np.sum(vcf_f['calldata/GT'], axis=2).T
+            log.info('Processing validation data...')
+            val_snps = np.sum(f_val['calldata/GT'], axis=2).T
         else:
             log.error('Unrecognized validation file format. Make sure file ends with .h5, .hdf5, .vcf or .vcf.gz .')
             sys.exit(1)
-    if tr_pops_f is not None:
+    if tr_pops_f:
         with open(tr_pops_f, 'r') as fb:
             tr_pops = fb.readlines()
-    if val_pops_f is not None:
+    if val_pops_f:
         with open(val_pops_f, 'r') as fb:
             val_pops = fb.readlines()
     validate_data(tr_snps, tr_pops, val_snps, val_pops)
+    log.info(f'Data contains {tr_snps.shape[0]} samples and {tr_snps.shape[1]} SNPs.')
+    if val_snps is not None:
+        log.info(f'Validation data contains {val_snps.shape[0]} samples and {val_snps.shape[1]} SNPs.')
+    log.info('Data loaded.')
     return tr_snps, tr_pops, val_snps, val_pops
 
 def validate_data(tr_snps, tr_pops, val_snps, val_pops):
     assert not (val_snps is None and val_pops is not None), 'Populations were specified for validation data, but no SNPs were specified.'
-    if tr_snps is not None:
+    if tr_pops is not None:
         assert len(tr_snps) == len(tr_pops), f'Number of samples in data and population file does not match: {len(tr_snps)} vs {len(tr_pops)}.'
     if val_snps is not None:
         assert tr_snps.shape[1] == val_snps.shape[1], f'Number of SNPs in training and validation data does not match: {tr_snps.shape[1]} vs {val_snps.shape[1]}.'
         if val_pops is not None:
             assert len(val_snps) == len(val_pops), f'Number of samples in validation data and validation population file does not match: {len(tr_snps)} vs {len(tr_pops)}.'
     return
+
+def get_model_predictions(model, data, bsize, device):
+    model.to(torch.device(device))
+    outs = [torch.tensor([]) for _ in range(len(model.ks))]
+    model.eval()
+    with torch.no_grad():
+        for i, (X, _) in enumerate(model._batch_generator(data, bsize, shuffle=False)):
+            X = X.to(device)
+            out = model(X, True)
+            for j in range(len(model.ks)):
+                outs[j] = torch.cat((outs[j], out[j].detach().cpu()), axis=0)
+    return [out.cpu().numpy() for out in outs]
+
+def write_outputs(model, trX, valX, bsize, device, run_name, out_path):
+    if out_path.endswith('/'):
+        out_path = out_path[:-1]
+    for dec in model.decoders.decoders:
+        w = 1-dec.weight.data.cpu().numpy()
+        k = dec.in_features
+        np.savetxt(f'{out_path}/{run_name}.{k}.P', w, delimiter=' ')
+    tr_preds = get_model_predictions(model, trX, bsize, device)
+    for i, k in enumerate(model.ks):
+        np.savetxt(f'{out_path}/{run_name}.{k}.Q', tr_preds[i], delimiter=' ')
+    if valX is not None:
+        val_preds = get_model_predictions(model, valX, bsize, device)
+        for i, k in enumerate(model.ks):
+            np.savetxt(f'{out_path}/{run_name}_validation.{k}.Q', val_preds[i], delimiter=' ')
+    return 0
