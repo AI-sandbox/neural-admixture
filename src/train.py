@@ -18,7 +18,7 @@ from switchers import Switchers
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-def fit_model(trX, valX, args, trY=None, valY=None):
+def fit_model(trX, args, valX=None, trY=None, valY=None):
     switchers = Switchers.get_switchers()
     num_max_epochs = args.epochs
     batch_size = args.batch_size
@@ -101,7 +101,7 @@ def main():
     else:
         tr_file, val_file = f'{args.data_path}/train.h5', f'{args.data_path}/validation.h5'
     trX, trY, valX, valY = utils.read_data(tr_file, val_file)
-    model, P_init, device = fit_model(trX, valX, args, trY, valY)
+    model, P_init, device = fit_model(trX, args, valX, trY, valY)
     if model is None:
         return 1
     pca_path = args.pca_path

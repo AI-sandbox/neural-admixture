@@ -1,7 +1,9 @@
+import allel
 import argparse
 import h5py
 import logging
 import os
+import sys
 import wandb
 
 logging.basicConfig(level=logging.INFO)
@@ -60,7 +62,59 @@ def initialize_wandb(run_name, trX, valX, args, out_path, silent=True):
                          'sum_parents': False})
     return run_name
 
-def read_data(tr_file, val_file):
-    f_tr = h5py.File(tr_file, 'r')
-    f_val = h5py.File(val_file, 'r')
-    return f_tr['snps'], f_tr['populations'], f_val['snps'], f_val['populations']
+def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
+    '''
+    tr_file: string denoting the path of the main data file. The format of this file must be either HDF5 or VCF.
+    val_file: optional. String denoting the path of the validation data file. The format of this file must be either HDF5 or VCF.
+    tr_pops_f: optional. String denoting the path containing the main populations file. It must be a plain txt file where each row is a number specifying the population of the corresponding sample, as in ADMIXTURE.
+    val_pops_f: optional. String denoting the path containing the validation populations file. It must be a plain txt file where each row is a number specifying the population of the corresponding sample, as in ADMIXTURE.
+    '''
+    tr_snps, tr_pops, val_snps, val_pops = None, None, None, None
+    # Training data
+    if tr_file.endswith('.h5') or tr_file.endswith('.hdf5'):
+        log.info('Input format is HDF5.')
+        f_tr = h5py.File(tr_file, 'r')
+        tr_snps = f_tr['snps']
+    elif tr_file.endswith('.vcf') or tr_file.endswith('.vcf.gz'):
+        log.info('Input format is VCF.')
+        log.info('Reading...')
+        f_tr = allel.read_vcf(tr_file)
+        log.info('Processing...')
+        tr_snps = np.sum(vcf_f['calldata/GT'], axis=2).T
+    else:
+        log.error('Unrecognized file format. Make sure file ends with .h5, .hdf5, .vcf or .vcf.gz .')
+        sys.exit(1)
+
+    # Validation data
+    if val_file is not None:
+        if val_file.endswith('.h5') or val_file.endswith('.hdf5'):
+            log.info('Validation input format is HDF5.')
+            f_val = h5py.File(val_file, 'r')
+            val_snps = f_val['snps']
+        elif val_file.endswith('.vcf') or val_file.endswith('.vcf.gz'):
+            log.info('Input format is VCF.')
+            log.info('Reading...')
+            f_val = allel.read_vcf(val_file)
+            log.info('Processing...')
+            val_snps = np.sum(vcf_f['calldata/GT'], axis=2).T
+        else:
+            log.error('Unrecognized validation file format. Make sure file ends with .h5, .hdf5, .vcf or .vcf.gz .')
+            sys.exit(1)
+    if tr_pops_f is not None:
+        with open(tr_pops_f, 'r') as fb:
+            tr_pops = fb.readlines()
+    if val_pops_f is not None:
+        with open(val_pops_f, 'r') as fb:
+            val_pops = fb.readlines()
+    validate_data(tr_snps, tr_pops, val_snps, val_pops)
+    return tr_snps, tr_pops, val_snps, val_pops
+
+def validate_data(tr_snps, tr_pops, val_snps, val_pops):
+    assert not (val_snps is None and val_pops is not None), 'Populations were specified for validation data, but no SNPs were specified.'
+    if tr_snps is not None:
+        assert len(tr_snps) == len(tr_pops), f'Number of samples in data and population file does not match: {len(tr_snps)} vs {len(tr_pops)}.'
+    if val_snps is not None:
+        assert tr_snps.shape[1] == val_snps.shape[1], f'Number of SNPs in training and validation data does not match: {tr_snps.shape[1]} vs {val_snps.shape[1]}.'
+        if val_pops is not None:
+            assert len(val_snps) == len(val_pops), f'Number of samples in validation data and validation population file does not match: {len(tr_snps)} vs {len(tr_pops)}.'
+    return
