@@ -142,3 +142,32 @@ class NeuralAdmixture(nn.Module):
             val_loss = self._validate(valX, loss_f, batch_size, device, loss_f_supervised, valY)
             return tr_loss / trX.shape[0], val_loss / valX.shape[0]
         return tr_loss / trX.shape[0], None
+
+    @staticmethod
+    def _hudsons_fst(pop1, pop2):
+        '''
+        Computes Hudson's Fst given variant frequencies of two populations.
+        '''
+        try:
+            num = np.mean(((pop1-pop2)**2))
+            den = np.mean(np.multiply(pop1, 1-pop2)+np.multiply(pop2, 1-pop1))
+            return num/den
+        except Exception as e:
+            log.error(e)
+            return np.nan
+
+    def display_divergences(self):
+        for i, k in enumerate(self.ks):
+            dec = self.decoders.decoders[i].weight.data.cpu().numpy()
+            header = '\t'.join([f'Pop{p}' for p in range(k-1)])
+            print(f'\nFst divergences between estimated populations: (K = {k})')
+            print(f'\t{header}')
+            print('Pop0')
+            for j in range(1, k):
+                print(f'Pop{j}', end='')
+                pop2 = dec[:,j]
+                for l in range(j):
+                    pop1 = dec[:,l]
+                    fst = self._hudsons_fst(pop1, pop2)
+                    print('\t{:0.3f}'.format(fst), end='' if l != j-1 else '\n')
+            return

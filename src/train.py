@@ -104,6 +104,7 @@ def main():
 
     trX, trY, valX, valY = utils.read_data(tr_file, val_file, tr_pops_f, val_pops_f)
     model, device = fit_model(trX, args, valX, trY, valY)
+    model.display_divergences()
     utils.write_outputs(model, trX, valX, args.batch_size, device, args.name, args.save_dir)
     return 0
 
