@@ -2,10 +2,9 @@
 
 ![multi_head_arch](https://user-images.githubusercontent.com/31998088/123008111-99a46e00-d3ba-11eb-8ced-d394ef903487.png)
 
+Neural ADMIXTURE is an unsupervised global ancestry inference technique based on ADMIXTURE. By using neural networks, Neural ADMIXTURE offers high quality ancestry assignments with a running time which is much faster than ADMIXTURE's. For more information, we recommend reading [the corresponding article](https://www.biorxiv.org/content/10.1101/2021.06.27.450081v3).
 
-## Command Line Interface
-
-A command line interface with a similar input/output as the original ADMIXTURE will be released shortly, stay tuned!
+The software can be invoked via CLI and has a similar interface to ADMIXTURE (_e.g._ the output format is completely interchangeable). While the software runs in both CPU and GPU, we recommend using GPUs if available to take advantage of the neural network-based implementation.
 
 ## Requirements
 
@@ -19,25 +18,60 @@ We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `con
 
 ## Training from scratch
 
-To train a model from scratch, simply invoke the following commands inside the `src` directory. For more info about all the arguments, please run `python3 train.py --help`. If training a single-head version of the network suffices, please set `min_k` and `max_k` to the same value (K). Note that only HDF5 and VCF files are supported as of now.
+To train a model from scratch, simply invoke the following commands from the root directory of the project. For more info about all the arguments, please run `python3 train.py --help`. If training a single-head version of the network suffices, please set `min_k` and `max_k` to the same value (K). Note that only HDF5 and VCF files are supported as of now. The
 
 For unsupervised Neural ADMIXTURE:
 
 ```console
-> python3 train.py --min_k MIN_K --max_k MAX_K --epochs NUM_EPOCHS --decoder_init pckmeans --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_path INIT_PATH
+> python3 train.py --min_k MIN_K --max_k MAX_K --epochs NUM_EPOCHS --decoder_init pckmeans --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_path INIT_PATH --batch_size BSIZE
 ```
 
 For supervised Neural ADMIXTURE:
 
 ```console
-> python3 train.py --min_k MIN_K --max_k MAX_K --supervised --epochs NUM_EPOCHS --decoder_init supervised --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_path INIT_PATH  # only single-head support at the moment
+> python3 train.py --min_k MIN_K --max_k MAX_K --supervised --epochs NUM_EPOCHS --decoder_init supervised --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_path INIT_PATH --batch_size BSIZE # only single-head support at the moment
 ```
 
 For pre-trained Neural ADMIXTURE:
 
 ```console
-> python3 train.py --min_k MIN_K --max_k MAX_K --freeze_decoder --epochs NUM_EPOCHS --decoder_init admixture --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_path INIT_PATH  # only single-head support at the moment
+> python3 train.py --min_k MIN_K --max_k MAX_K --freeze_decoder --epochs NUM_EPOCHS --decoder_init admixture --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_path INIT_PATH  --batch_size BSIZE # only single-head support at the moment
 ```
+
+As an example, the following ADMIXTURE call
+
+```console
+> ./admixture snps_data.bed 8 -s 42
+```
+
+would be mimicked in Neural ADMIXTURE by running
+
+```console
+> python3 train.py --min_k 8 --max_k 8 --epochs 10 --decoder_init pckmeans --name snps_data --data_path snps_data.vcf --save_dir SAVE_PATH --init_path INIT_PATH --seed 42 --batch_size 200
+```
+
+with some parameters such as the number of epochs, the decoder initialization or the save directories not having a direct equivalent. Note that if you have BED files, you should convert them to VCF using, for example, [plink](https://www.cog-genomics.org/plink/2.0/).
+
+Several files will be output to the `SAVE_PATH` directory (the `name` parameter will be used to create the whole filenames):
+- A `.P` file, similar to ADMIXTURE.
+- A `.Q` file, similar to ADMIXTURE.
+- A `.pt` file, containing the weights of the trained network.
+- A `.json` file, with the configuration of the network.
+
+The last two files are required to run posterior inference using the network, so be aware of not deleting them accidentally! Logs are printed to the `stdout` channel by default. If you want to store them in a file, you can use a pipe (`python3 train.py ... > test.log`) so that the output is redirected to that file.
+
+## Inference mode (projective analysis)
+
+ADMIXTURE allows reusing computations in the _projective analysis_ mode, in which the `P` (`F`, frequencies) matrix is fixed to an already known result and only the assignments are computed. Due to the nature of our algorithm, assignments can be computed for unseen data by simply feeding the data through the encoder. The entry-point for this mode is `inference.py`.
+
+For example, assuming we have a trained Neural ADMIXTURE (named `nadm_test`) in the path `./outputs`, one could run inference on unseen data (`./data/unseen_data.vcf`) via the following command:
+
+```console
+> python3 inference.py --name nadm_test --save_dir ./outputs --out_name unseen_nadm_test --data_path ./data/unseen_data.vcf
+```
+
+For this command to work, files `./outputs/nadm_test.pt` and `./outputs/nadm_test_config.json`, which are training outputs, must exist. In this case, only a `.Q` will be created, which will contain the assignments for this data (the parameter of the flag `out_name` will be used to generate the output file name). This file will be written in the `--save_dir` directory (in this case, `./outputs`).
+
 
 ## Experiments replication
 

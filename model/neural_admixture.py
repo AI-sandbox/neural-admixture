@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 import numpy as np
@@ -35,9 +36,7 @@ class NeuralAdmixture(nn.Module):
             self.clipper = ZeroOneClipper()
             self.decoders.decoders.apply(self.clipper)
         else:
-            self.decoders = NonLinearMultiHeadDecoder(self.ks, num_features, bias=True,
-                                                      hidden_size=self.hidden_size,
-                                                      hidden_activation=self.encoder_activation)
+            raise NotImplementedError
 
     def forward(self, X, only_assignments=False):
         X = self.batch_norm(X)
@@ -53,9 +52,7 @@ class NeuralAdmixture(nn.Module):
     def launch_training(self, trX, optimizer, loss_f, num_epochs,
                         device, batch_size=0, valX=None, display_logs=True,
                         save_every=10, save_path='../outputs/model.pt',
-                        run_name=None, plot_every=0, trY=None, valY=None, seed=42, shuffle=False, log_to_wandb=False):
-        if plot_every != 0:
-            assert trY is not None and valY is not None and valX is not None, 'Labels are needed if plots are to be generated'
+                        trY=None, valY=None, seed=42, shuffle=False, log_to_wandb=False):
         random.seed(seed)
         loss_f_supervised, trY_num, valY_num = None, None, None
         if self.supervised:
@@ -69,22 +66,17 @@ class NeuralAdmixture(nn.Module):
             loss_f_supervised = nn.CrossEntropyLoss(reduction='mean')
         for ep in range(num_epochs):
             tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, shuffle, loss_f_supervised, trY_num, valY_num)
-            if log_to_wandb:
-                wandb.log({"tr_loss": tr_loss, "val_loss": val_loss})
-            elif run_name is not None:
-                wandb.log({"tr_loss": tr_loss})
             assert not math.isnan(tr_loss), 'Training loss is NaN'
+            if log_to_wandb and val_loss is not None:
+                wandb.log({"tr_loss": tr_loss, "val_loss": val_loss})
+            elif log_to_wandb and val_loss is None:
+                wandb.log({"tr_loss": tr_loss})
             if display_logs:
                 log.info(f'[METRICS] EPOCH {ep+1}: mean training loss: {tr_loss}')
                 if val_loss is not None:
                     log.info(f'[METRICS] EPOCH {ep+1}: mean validation loss: {val_loss}')
             if save_every*ep > 0 and ep % save_every == 0:
                 torch.save(self.state_dict(), save_path)
-            if plot_every != 0 and (ep == 0 or (ep+1) % plot_every == 0):
-                log.info('Rendering plots for epoch {}'.format(ep+1))
-                generate_plots(self, trX, trY, valX, valY, device,
-                               batch_size, is_multihead=True,
-                               min_k=min(self.ks), max_k=max(self.ks), epoch=ep+1)
         return ep+1
 
     def _get_encoder_norm(self):
@@ -171,3 +163,13 @@ class NeuralAdmixture(nn.Module):
                     fst = self._hudsons_fst(pop1, pop2)
                     print('\t{:0.3f}'.format(fst), end='' if l != j-1 else '\n')
             return
+    
+    def save_config(self, name, save_dir):
+        config = {
+            'Ks': self.ks,
+            'num_snps': self.num_features,
+        }
+        with open(f'{save_dir}/{name}_config.json', 'w') as fb:
+            json.dump(config, fb)
+        log.info('Configuration file saved.')
+        return
