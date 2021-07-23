@@ -10,41 +10,43 @@ import wandb
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
-def parse_args():
+def parse_args(train=True):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--learning_rate', required=False, default=0.0001, type=float, help='Learning rate')
-    parser.add_argument('--batch_size', required=False, default=200, type=int, help='Batch size')
-    parser.add_argument('--epochs', required=True, type=int, help='Number of epochs')
-    parser.add_argument('--decoder_init', required=True, type=str, choices=['random', 'mean_SNPs', 'mean_random', 'kmeans',
-                                                                            'minibatch_kmeans', 'kmeans++', 'binomial',
-                                                                            'pca', 'admixture', 'pckmeans', 'supervised'], help='Decoder initialization')
-    parser.add_argument('--optimizer', required=False, default='adam', type=str, choices=['adam', 'sgd'], help='Optimizer')
-    parser.add_argument('--save_every', required=False, default=50, type=int, help='Save every this number of epochs')
-    parser.add_argument('--save_dir', required=True, type=str, help='Save model in this directory')
-    parser.add_argument('--l2_penalty', required=False, default=0.01, type=float, help='L2 penalty on encoder weights')
-    parser.add_argument('--display_logs', required=False, type=int, default=1, choices=[0, 1], help='Whether to display logs during training or not')
-    parser.add_argument('--activation', required=False, default='relu', type=str, choices=['relu', 'tanh'], help='Activation function for deep encoder layers')
-    parser.add_argument('--wandb_log', required=False, default=0, type=int, choices=[0, 1], help='Whether to log to wandb or not')
-    parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
-    parser.add_argument('--min_k', required=False, type=int, default=7, help='Minimum number of clusters for multihead admixture')
-    parser.add_argument('--max_k', required=False, type=int, default=7, help='Maximum number of clusters for multihead admixture')
-    parser.add_argument('--chr', required=False, type=str, choices=['1', '22'], help='Chromosome number to train on')
-    parser.add_argument('--shuffle', required=False, default=1, type=int, choices=[0, 1], help='Whether to shuffle the training data at every epoch')
-    parser.add_argument('--hidden_size', required=False, default=512, type=int, help='Hidden size in encoder and non-linear decoder')
-    parser.add_argument('--linear', required=False, default=1, type=int, choices=[0, 1], help='Whether to use a linear decoder or not')
-    parser.add_argument('--init_path', required=True, type=str, help='Path containing precomputed initialization weights to load from/to save to')
-    parser.add_argument('--freeze_decoder', action='store_true', default=False, help='Whether to freeze linear decoder weights')
-    parser.add_argument('--supervised', action='store_true', default=False, help='Whether to use the supervised version or not')
-    parser.add_argument('--plot_k', required=False, default=7, type=int, help='Value of K used for the post-training plots')
-    parser.add_argument('--name', required=False, type=str, help='Experiment name (will be used for output filenames)')
-    parser.add_argument('--dataset', required=False, type=str, help='Dataset to be used (to replicate experiments)')
+    if train:
+        parser.add_argument('--learning_rate', required=False, default=0.0001, type=float, help='Learning rate')
+        parser.add_argument('--epochs', required=True, type=int, help='Number of epochs')
+        parser.add_argument('--decoder_init', required=True, type=str, choices=['random', 'mean_SNPs', 'mean_random', 'kmeans',
+                                                                                'minibatch_kmeans', 'kmeans++', 'binomial',
+                                                                                'pca', 'admixture', 'pckmeans', 'supervised'], help='Decoder initialization')
+        parser.add_argument('--optimizer', required=False, default='adam', type=str, choices=['adam', 'sgd'], help='Optimizer')
+        parser.add_argument('--save_every', required=False, default=50, type=int, help='Save every this number of epochs')
+        parser.add_argument('--l2_penalty', required=False, default=0.01, type=float, help='L2 penalty on encoder weights')
+        parser.add_argument('--display_logs', required=False, type=int, default=1, choices=[0, 1], help='Whether to display logs during training or not')
+        parser.add_argument('--activation', required=False, default='relu', type=str, choices=['relu', 'tanh'], help='Activation function for deep encoder layers')
+        parser.add_argument('--wandb_log', required=False, default=0, type=int, choices=[0, 1], help='Whether to log to wandb or not')
+        parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
+        parser.add_argument('--min_k', required=False, type=int, default=7, help='Minimum number of clusters for multihead admixture')
+        parser.add_argument('--max_k', required=False, type=int, default=7, help='Maximum number of clusters for multihead admixture')
+        parser.add_argument('--chr', required=False, type=str, choices=['1', '22'], help='Chromosome number to train on')
+        parser.add_argument('--shuffle', required=False, default=1, type=int, choices=[0, 1], help='Whether to shuffle the training data at every epoch')
+        parser.add_argument('--hidden_size', required=False, default=512, type=int, help='Hidden size in encoder and non-linear decoder')
+        parser.add_argument('--linear', required=False, default=1, type=int, choices=[0, 1], help='Whether to use a linear decoder or not')
+        parser.add_argument('--init_path', required=True, type=str, help='Path containing precomputed initialization weights to load from/to save to')
+        parser.add_argument('--freeze_decoder', action='store_true', default=False, help='Whether to freeze linear decoder weights')
+        parser.add_argument('--supervised', action='store_true', default=False, help='Whether to use the supervised version or not')
+        parser.add_argument('--dataset', required=False, type=str, help='Dataset to be used (to replicate experiments)')
+        parser.add_argument('--validation_data_path', required=False, default='', type=str, help='Path containing the validation data')
+        parser.add_argument('--populations_path', required=False, default='', type=str, help='Path containing the main data populations')
+        parser.add_argument('--validation_populations_path', required=False, default='', type=str, help='Path containing the validation data populations')
+        parser.add_argument('--wandb_user', required=False, type=str, help='wandb user')
+        parser.add_argument('--wandb_project', required=False, type=str, help='wandb project')
+        parser.add_argument('--pca_path', required=False, type=str, help='Path containing PCA object, used for plots')
+    else:
+        parser.add_argument('--out_name', required=True, type=str, help='Name used to output files on inference mode.')
+    parser.add_argument('--save_dir', required=True, type=str, help='{} this directory'.format('Save model in' if train else 'Load model from'))
     parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data')
-    parser.add_argument('--validation_data_path', required=False, default='', type=str, help='Path containing the validation data')
-    parser.add_argument('--populations_path', required=False, default='', type=str, help='Path containing the main data populations')
-    parser.add_argument('--validation_populations_path', required=False, default='', type=str, help='Path containing the validation data populations')
-    parser.add_argument('--wandb_user', required=False, type=str, help='wandb user')
-    parser.add_argument('--wandb_project', required=False, type=str, help='wandb project')
-    parser.add_argument('--pca_path', required=False, type=str, help='Path containing PCA object, used for plots')
+    parser.add_argument('--name', required=True, type=str, help='Experiment/model name')
+    parser.add_argument('--batch_size', required=False, default=200, type=int, help='Batch size')
     return parser.parse_args()
 
 def initialize_wandb(run_name, trX, valX, args, out_path, silent=True):
@@ -140,13 +142,14 @@ def get_model_predictions(model, data, bsize, device):
                 outs[j] = torch.cat((outs[j], out[j].detach().cpu()), axis=0)
     return [out.cpu().numpy() for out in outs]
 
-def write_outputs(model, trX, valX, bsize, device, run_name, out_path):
+def write_outputs(model, trX, valX, bsize, device, run_name, out_path, only_Q=False):
     if out_path.endswith('/'):
         out_path = out_path[:-1]
-    for dec in model.decoders.decoders:
-        w = 1-dec.weight.data.cpu().numpy()
-        k = dec.in_features
-        np.savetxt(f'{out_path}/{run_name}.{k}.P', w, delimiter=' ')
+    if not only_Q:
+        for dec in model.decoders.decoders:
+            w = 1-dec.weight.data.cpu().numpy()
+            k = dec.in_features
+            np.savetxt(f'{out_path}/{run_name}.{k}.P', w, delimiter=' ')
     tr_preds = get_model_predictions(model, trX, bsize, device)
     for i, k in enumerate(model.ks):
         np.savetxt(f'{out_path}/{run_name}.{k}.Q', tr_preds[i], delimiter=' ')

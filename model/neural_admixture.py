@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 import numpy as np
@@ -35,9 +36,7 @@ class NeuralAdmixture(nn.Module):
             self.clipper = ZeroOneClipper()
             self.decoders.decoders.apply(self.clipper)
         else:
-            self.decoders = NonLinearMultiHeadDecoder(self.ks, num_features, bias=True,
-                                                      hidden_size=self.hidden_size,
-                                                      hidden_activation=self.encoder_activation)
+            raise NotImplementedError
 
     def forward(self, X, only_assignments=False):
         X = self.batch_norm(X)
@@ -80,11 +79,6 @@ class NeuralAdmixture(nn.Module):
                     log.info(f'[METRICS] EPOCH {ep+1}: mean validation loss: {val_loss}')
             if save_every*ep > 0 and ep % save_every == 0:
                 torch.save(self.state_dict(), save_path)
-            if plot_every != 0 and (ep == 0 or (ep+1) % plot_every == 0):
-                log.info('Rendering plots for epoch {}'.format(ep+1))
-                generate_plots(self, trX, trY, valX, valY, device,
-                               batch_size, is_multihead=True,
-                               min_k=min(self.ks), max_k=max(self.ks), epoch=ep+1)
         return ep+1
 
     def _get_encoder_norm(self):
@@ -171,3 +165,13 @@ class NeuralAdmixture(nn.Module):
                     fst = self._hudsons_fst(pop1, pop2)
                     print('\t{:0.3f}'.format(fst), end='' if l != j-1 else '\n')
             return
+    
+    def save_config(self, name, save_dir):
+        config = {
+            'Ks': self.ks,
+            'num_snps': self.num_features,
+        }
+        with open(f'{save_dir}/{name}_config.json', 'w') as fb:
+            json.dump(config, fb)
+        log.info('Configuration file saved.')
+        return

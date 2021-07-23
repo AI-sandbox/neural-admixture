@@ -1,18 +1,14 @@
 import logging
-import matplotlib.pyplot as plt
-import numpy as np
-import pickle
 import sys
 import torch
 import torch.nn as nn
-import utils
 import wandb
-sys.path.append('..')
 from model.neural_admixture import NeuralAdmixture
 from codetiming import Timer
 from parallel import CustomDataParallel
 from pathlib import Path
-from switchers import Switchers
+from src.switchers import Switchers
+from src.utils import utils
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -89,7 +85,8 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
         wandb.run.summary['total_elapsed_time'] = elapsed_time
         wandb.run.summary['avg_epoch_time'] = elapsed_time/actual_num_epochs
     torch.save(model.state_dict(), save_path)
-    log.info('Fit done.')
+    model.save_config(run_name, save_dir)
+    log.info('Optimization process finished.')
     return model, device
 
 def main():
