@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='neural-admixture',
-    version='0.2.9',    
+    version='0.4.0',
     description='Population clustering with autoencoders',
     url='https://github.com/AI-sandbox/neural-admixture',
     author='Albert Dominguez Mantes',
