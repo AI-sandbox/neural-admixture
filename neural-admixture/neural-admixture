@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+if [[ "$1" = -i ]]; then
+    python3 -m inference $@
+else
+    python3 -m train $@
+fi

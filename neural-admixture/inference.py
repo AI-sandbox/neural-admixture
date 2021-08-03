@@ -32,10 +32,12 @@ def main():
     X, _, _, _ = utils.read_data(data_file_str)
     assert X.shape[1] == config['num_snps'], 'Number of SNPs in data does not correspond to number of SNPs the network was trained on.'
     log.info('Data loaded and validated. Running inference...')
-    preds = utils.get_model_predictions(model, X, bsize=args.batch_size, device=device)
+    _ = utils.get_model_predictions(model, X, bsize=args.batch_size, device=device)
+    log.info('Inference run successfully. Writing outputs...')
     utils.write_outputs(model, X, valX=None, bsize=args.batch_size,
                         device=device, run_name=out_name,
                         out_path=args.save_dir, only_Q=True)
+    log.info('Exiting...')
 
 if __name__ == '__main__':
     sys.exit(main())
