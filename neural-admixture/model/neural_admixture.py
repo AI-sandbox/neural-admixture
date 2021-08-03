@@ -162,7 +162,7 @@ class NeuralAdmixture(nn.Module):
                     pop1 = dec[:,l]
                     fst = self._hudsons_fst(pop1, pop2)
                     print('\t{:0.3f}'.format(fst), end='' if l != j-1 else '\n')
-            return
+        return
     
     def save_config(self, name, save_dir):
         config = {

@@ -1,4 +1,5 @@
 import logging
+import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pickle
@@ -8,9 +9,19 @@ from collections.abc import Iterable
 from sklearn.cluster import KMeans, MiniBatchKMeans, kmeans_plusplus
 from sklearn.decomposition import PCA
 
+
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
+def pca_plot(X_pca, path):
+    plt.figure(figsize=(15,10))
+    plt.scatter(X_pca[:,0], X_pca[:,1], s=.9, c='black')
+    plt.xticks([])
+    plt.yticks([])
+    plt.title('Training data projected onto first two principal components')
+    plt.savefig(path)
+    log.info('Plot rendered.')
+    return
 
 class KMeansInitialization(object):
     @classmethod
@@ -166,7 +177,7 @@ class AdmixtureInitialization(object):
 
 class PCKMeansInitialization(object):
     @classmethod
-    def get_decoder_init(cls, X, K, path):
+    def get_decoder_init(cls, X, K, path, run_name):
         log.info('Running PC-KMeans initialization...')
         t0 = time.time()
         try:
@@ -194,6 +205,14 @@ class PCKMeansInitialization(object):
             P_init = torch.tensor(pca_obj.inverse_transform(k_means_obj.cluster_centers_), dtype=torch.float32).view(K, -1)
         te = time.time()
         log.info('Weights initialized in {} seconds.'.format(te-t0))
+        log.info('Rendering PCA plot...')
+        try:
+            save_root = '/'.join(path.split('/')[:-1]) if len(path.split('/')) > 1 else '.'
+            plot_save_path = f'{save_root}/{run_name}_training_pca.png'
+            pca_plot(X_pca, plot_save_path)
+        except Exception as e:
+            log.warn(f'Could not render PCA plot: {e}')
+            log.info('Resuming...')
         return P_init
         
 class SupervisedInitialization(object):

@@ -6,36 +6,42 @@ Neural ADMIXTURE is an unsupervised global ancestry inference technique based on
 
 The software can be invoked via CLI and has a similar interface to ADMIXTURE (_e.g._ the output format is completely interchangeable). While the software runs in both CPU and GPU, we recommend using GPUs if available to take advantage of the neural network-based implementation.
 
-## Requirements
+## Installation
 
-We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `conda`), and then install the requirements there. As an example, for `virtualenv`, one should launch the following commands:
+The package can be easily installed using `pip`:
+
+```console
+> pip3 install neural-admixture
+```
+
+We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `conda`), and then install the package `neural-admixture` there. As an example, for `virtualenv`, one should launch the following commands:
 
 ```console
 > virtualenv --python=python3.9 ~/venv/nadmenv
 > source ~/venv/nadmenv/bin/activate
-(nadmenv) > pip3 install -r requirements.txt 
+(nadmenv) > pip3 install neural-admixture
 ```
 
-## Training from scratch
+## Running Neural ADMIXTURE
 
-To train a model from scratch, simply invoke the following commands from the root directory of the project. For more info about all the arguments, please run `python3 train.py --help`. If training a single-head version of the network suffices, please set `min_k` and `max_k` to the same value (K). Note that only HDF5 and VCF files are supported as of now. The
+To train a model from scratch, simply invoke the following commands from the root directory of the project. For more info about all the arguments, please run `neural-admixture --help`. If training a single-head version of the network suffices, please use the flag `--k` instead of `--min_k` and `--max_k`. Note that only HDF5 and VCF files are supported as of now. The
 
-For unsupervised Neural ADMIXTURE:
+For unsupervised Neural ADMIXTURE (single-head):
 
 ```console
-> python3 train.py --min_k MIN_K --max_k MAX_K --epochs NUM_EPOCHS --decoder_init pckmeans --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_path INIT_PATH --batch_size BSIZE
+> neural-admixture --k K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_file INIT_FI
+````
+
+For unsupervised Neural ADMIXTURE (multi-head):
+
+```console
+> neural-admixture --min_k MIN_K --max_k MAX_K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_file INIT_FILE
 ```
 
 For supervised Neural ADMIXTURE:
 
 ```console
-> python3 train.py --min_k MIN_K --max_k MAX_K --supervised --epochs NUM_EPOCHS --decoder_init supervised --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_path INIT_PATH --batch_size BSIZE # only single-head support at the moment
-```
-
-For pre-trained Neural ADMIXTURE:
-
-```console
-> python3 train.py --min_k MIN_K --max_k MAX_K --freeze_decoder --epochs NUM_EPOCHS --decoder_init admixture --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_path INIT_PATH  --batch_size BSIZE # only single-head support at the moment
+> neural-admixture --k K --supervised --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH # only single-head support at the moment
 ```
 
 As an example, the following ADMIXTURE call
@@ -47,85 +53,44 @@ As an example, the following ADMIXTURE call
 would be mimicked in Neural ADMIXTURE by running
 
 ```console
-> python3 train.py --min_k 8 --max_k 8 --epochs 10 --decoder_init pckmeans --name snps_data --data_path snps_data.vcf --save_dir SAVE_PATH --init_path INIT_PATH --seed 42 --batch_size 200
+> neural-admixture --k 8 --data_path snps_data.vcf --save_dir SAVE_PATH --init_file INIT_FILE --name snps_data --seed 42
 ```
 
 with some parameters such as the number of epochs, the decoder initialization or the save directories not having a direct equivalent. Note that if you have BED files, you should convert them to VCF using, for example, [plink](https://www.cog-genomics.org/plink/2.0/).
 
 Several files will be output to the `SAVE_PATH` directory (the `name` parameter will be used to create the whole filenames):
+- If the unsupervised version is run, a `Pickle` binary file containing the PCA object (using the `init_name` parameter), as well as an image file containing a PCA plot.
 - A `.P` file, similar to ADMIXTURE.
 - A `.Q` file, similar to ADMIXTURE.
 - A `.pt` file, containing the weights of the trained network.
 - A `.json` file, with the configuration of the network.
 
-The last two files are required to run posterior inference using the network, so be aware of not deleting them accidentally! Logs are printed to the `stdout` channel by default. If you want to store them in a file, you can use a pipe (`python3 train.py ... > test.log`) so that the output is redirected to that file.
+The last two files are required to run posterior inference using the network, so be aware of not deleting them accidentally! Logs are printed to the `stdout` channel by default.
 
 ## Inference mode (projective analysis)
 
-ADMIXTURE allows reusing computations in the _projective analysis_ mode, in which the `P` (`F`, frequencies) matrix is fixed to an already known result and only the assignments are computed. Due to the nature of our algorithm, assignments can be computed for unseen data by simply feeding the data through the encoder. The entry-point for this mode is `inference.py`.
+ADMIXTURE allows reusing computations in the _projective analysis_ mode, in which the `P` (`F`, frequencies) matrix is fixed to an already known result and only the assignments are computed. Due to the nature of our algorithm, assignments can be computed for unseen data by simply feeding the data through the encoder. This mode can be run by adding a `-i` flag right after the `neural-admixture` call.
 
 For example, assuming we have a trained Neural ADMIXTURE (named `nadm_test`) in the path `./outputs`, one could run inference on unseen data (`./data/unseen_data.vcf`) via the following command:
 
 ```console
-> python3 inference.py --name nadm_test --save_dir ./outputs --out_name unseen_nadm_test --data_path ./data/unseen_data.vcf
+> neural-admixture -i --name nadm_test --save_dir ./outputs --out_name unseen_nadm_test --data_path ./data/unseen_data.vcf
 ```
 
 For this command to work, files `./outputs/nadm_test.pt` and `./outputs/nadm_test_config.json`, which are training outputs, must exist. In this case, only a `.Q` will be created, which will contain the assignments for this data (the parameter of the flag `out_name` will be used to generate the output file name). This file will be written in the `--save_dir` directory (in this case, `./outputs`).
 
+## Advanced options
+
+- `batch_size`: number of samples used at every update. If you have memory issues, try setting a lower batch_size. Defaults to 32.
+- `epochs`: number of times the whole training dataset is used to update the weights. Try setting a higher value if convergence is not met. Can be lowered in the supervised setting. Defaults to 10. 
+- `decoder_init`: decoder initialization method. It is overriden to the `supervised` method if the program is run in supervised mode. While other methods are available, we recommend using the default. Defaults to `pckmeans`.
+- `learning_rate`: dictates how big an update to the weights will be. If you find the loss function oscillating, try setting a lower value. If convergence is slow, try setting a higher value. Defaults to 0.0001.
+- `seed`: seed for replication purposes, similar to ADMIXTURE's. Defaults to 42.
+
 
 ## Experiments replication
 
-We provide a simple step-by-step guide to train an unsupervised, pretrained and supervised version of Neural ADMIXTURE for the dataset CHM-22, with the same settings as in the paper. Other datasets have been avoided to avoid data size issues for hosting.
-
-If a GPU is to be used for training (which we recommend), it needs to have at least 12GB of memory.
-
-The data can be downloaded from [this link](https://www.dropbox.com/s/6z5ln82qz6jels6/chm-22.tar.gz?dl=0). It is a compressed file containing the data of CHM-22, as well as results from classical ADMIXTURE experiments. Extract its content in the root directory. Check that the folder `data/CHM-22` contains these 10 files:
-
-```sh
-- CHM-22_classic_train.P  # ADMIXTURE output
-- CHM-22_classic_train.Q  # ADMIXTURE output
-- CHM-22_classic_valid.P  # ADMIXTURE output
-- CHM-22_classic_valid.Q  # ADMIXTURE output
-- CHM-22-SUPERVISED_classic_train.P  # ADMIXTURE output
-- CHM-22-SUPERVISED_classic_train.Q  # ADMIXTURE output
-- CHM-22-SUPERVISED_classic_valid.P  # ADMIXTURE output
-- CHM-22-SUPERVISED_classic_valid.Q  # ADMIXTURE output
-- train.h5  # Training data
-- validation.h5  # Validation data
-```
-
-To launch training, simply run:
-
-```console
-> cd src && python3 launch_trainings.py
-```
-
-Note that this will overwrite previously trained models, included the downloaded ones.
-
-Three models will be trained in total, one per experiment. Moreover, the weights of the networks will be stored in `outputs/weights`, while visualizations of the Q estimates will be saved to `outputs/figures`.
-
-To compute and export metrics from trained models, launch the following command:
-
-```console
-> cd src && python3 evaluate.py
-```
-
-Several metrics reported will be computed and written to the standard output for every experiment.
-
-### Pre-trained models
-
-Pre-trained models can be downloaded from [this link](https://www.dropbox.com/s/6ybdy8siclul1o7/chm-22-weights.tar.gz?dl=0). Simply download the file and extract it in the root folder. This will place the weights into the folder `outputs/weights`, and they will be ready to run evaluation on.
-
-### Results
-
-Note that results may differ by a very small amount with those presented due to the hardware used, specially if the models used are not the pre-trained. Expected results of the neural version are:
-
-|      Dataset      |   Loss  | Δ<sub>T</sub> | Δ<sub>V</sub> | AMI<sub>T</sub> | AMI<sub>V</sub> |
-|:-----------------:|:-------:|:-------:|:-------:|:-----:|:-----:|
-|       CHM-22      | 6.802e8 |   2.4   |   .67   |  .88  |  .87  |
-| CHM-22-PRETRAINED | 6.621e8 |   6.0   |   1.5   |  .79  |  .78  |
-| CHM-22-SUPERVISED | 6.695e8 |  1.1e-5 |   .26   |  1.0  |   .9  |
-
+If you are interested in replicating some of the experiments of the article, please check [the instructions](replicate.md).
 
 ## License
 

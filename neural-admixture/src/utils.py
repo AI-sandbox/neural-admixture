@@ -14,10 +14,11 @@ def parse_args(train=True):
     parser = argparse.ArgumentParser()
     if train:
         parser.add_argument('--learning_rate', required=False, default=0.0001, type=float, help='Learning rate')
-        parser.add_argument('--epochs', required=True, type=int, help='Number of epochs')
-        parser.add_argument('--decoder_init', required=True, type=str, choices=['random', 'mean_SNPs', 'mean_random', 'kmeans',
-                                                                                'minibatch_kmeans', 'kmeans++', 'binomial',
-                                                                                'pca', 'admixture', 'pckmeans', 'supervised'], help='Decoder initialization')
+        parser.add_argument('--epochs', required=False, type=int, default=10, help='Number of epochs')
+        parser.add_argument('--decoder_init', required=False, type=str, default = 'pckmeans', choices=['random', 'mean_SNPs', 'mean_random', 'kmeans',
+                                                                                                       'minibatch_kmeans', 'kmeans++', 'binomial',
+                                                                                                       'pca', 'admixture', 'pckmeans', 'supervised'],
+                                                                                                       help='Decoder initialization (overriden if supervised)')
         parser.add_argument('--optimizer', required=False, default='adam', type=str, choices=['adam', 'sgd'], help='Optimizer')
         parser.add_argument('--save_every', required=False, default=50, type=int, help='Save every this number of epochs')
         parser.add_argument('--l2_penalty', required=False, default=0.01, type=float, help='L2 penalty on encoder weights')
@@ -25,13 +26,13 @@ def parse_args(train=True):
         parser.add_argument('--activation', required=False, default='relu', type=str, choices=['relu', 'tanh'], help='Activation function for deep encoder layers')
         parser.add_argument('--wandb_log', required=False, default=0, type=int, choices=[0, 1], help='Whether to log to wandb or not')
         parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
-        parser.add_argument('--min_k', required=False, type=int, default=7, help='Minimum number of clusters for multihead admixture')
-        parser.add_argument('--max_k', required=False, type=int, default=7, help='Maximum number of clusters for multihead admixture')
-        parser.add_argument('--chr', required=False, type=str, choices=['1', '22'], help='Chromosome number to train on')
+        parser.add_argument('--k', required=False, type=int, help='Minimum number of clusters for multihead admixture')
+        parser.add_argument('--min_k', required=False, type=int, help='Minimum number of clusters for multihead admixture')
+        parser.add_argument('--max_k', required=False, type=int, help='Maximum number of clusters for multihead admixture')
         parser.add_argument('--shuffle', required=False, default=1, type=int, choices=[0, 1], help='Whether to shuffle the training data at every epoch')
         parser.add_argument('--hidden_size', required=False, default=512, type=int, help='Hidden size in encoder and non-linear decoder')
         parser.add_argument('--linear', required=False, default=1, type=int, choices=[0, 1], help='Whether to use a linear decoder or not')
-        parser.add_argument('--init_path', required=True, type=str, help='Path containing precomputed initialization weights to load from/to save to')
+        parser.add_argument('--init_file', required=False, type=str, help='File name of precomputed initialization weights to load from/save to')
         parser.add_argument('--freeze_decoder', action='store_true', default=False, help='Whether to freeze linear decoder weights')
         parser.add_argument('--supervised', action='store_true', default=False, help='Whether to use the supervised version or not')
         parser.add_argument('--dataset', required=False, type=str, help='Dataset to be used (to replicate experiments)')
@@ -47,6 +48,7 @@ def parse_args(train=True):
     parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data')
     parser.add_argument('--name', required=True, type=str, help='Experiment/model name')
     parser.add_argument('--batch_size', required=False, default=200, type=int, help='Batch size')
+    parser.add_argument('-i', action='store_true', required=False, help='Dummy flag used in the entry script.')
     return parser.parse_args()
 
 def initialize_wandb(run_name, trX, valX, args, out_path, silent=True):
