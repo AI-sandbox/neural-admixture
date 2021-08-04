@@ -81,7 +81,7 @@ For this command to work, files `./outputs/nadm_test.pt` and `./outputs/nadm_tes
 
 ## Advanced options
 
-- `batch_size`: number of samples used at every update. If you have memory issues, try setting a lower batch_size. Defaults to 32.
+- `batch_size`: number of samples used at every update. If you have memory issues, try setting a lower batch_size. Defaults to 200.
 - `epochs`: number of times the whole training dataset is used to update the weights. Try setting a higher value if convergence is not met. Can be lowered in the supervised setting. Defaults to 10. 
 - `decoder_init`: decoder initialization method. It is overriden to the `supervised` method if the program is run in supervised mode. While other methods are available, we recommend using the default. Defaults to `pckmeans`.
 - `learning_rate`: dictates how big an update to the weights will be. If you find the loss function oscillating, try setting a lower value. If convergence is slow, try setting a higher value. Defaults to 0.0001.
