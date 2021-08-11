@@ -1,6 +1,7 @@
 # Neural ADMIXTURE
 
-![multi_head_arch](https://user-images.githubusercontent.com/31998088/123008111-99a46e00-d3ba-11eb-8ced-d394ef903487.png)
+![nadm_mna](https://user-images.githubusercontent.com/31998088/129018815-9dd52d89-bed9-4f5b-84d5-2dd919ff937e.png)
+
 
 Neural ADMIXTURE is an unsupervised global ancestry inference technique based on ADMIXTURE. By using neural networks, Neural ADMIXTURE offers high quality ancestry assignments with a running time which is much faster than ADMIXTURE's. For more information, we recommend reading [the corresponding article](https://www.biorxiv.org/content/10.1101/2021.06.27.450081v3).
 
