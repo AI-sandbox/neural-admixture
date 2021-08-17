@@ -17,7 +17,8 @@ def parse_args(train=True):
         parser.add_argument('--epochs', required=False, type=int, default=10, help='Number of epochs')
         parser.add_argument('--decoder_init', required=False, type=str, default = 'pckmeans', choices=['random', 'mean_SNPs', 'mean_random', 'kmeans',
                                                                                                        'minibatch_kmeans', 'kmeans++', 'binomial',
-                                                                                                       'pca', 'admixture', 'pckmeans', 'supervised'],
+                                                                                                       'pca', 'admixture', 'pckmeans', 'supervised',
+                                                                                                       'tsvdkmeans'],
                                                                                                        help='Decoder initialization (overriden if supervised)')
         parser.add_argument('--optimizer', required=False, default='adam', type=str, choices=['adam', 'sgd'], help='Optimizer')
         parser.add_argument('--save_every', required=False, default=50, type=int, help='Save every this number of epochs')
@@ -42,6 +43,7 @@ def parse_args(train=True):
         parser.add_argument('--wandb_user', required=False, type=str, help='wandb user')
         parser.add_argument('--wandb_project', required=False, type=str, help='wandb project')
         parser.add_argument('--pca_path', required=False, type=str, help='Path containing PCA object, used for plots')
+        parser.add_argument('--pca_components', required=False, type=int, default=2, help='Number of components to use for the PCKMeans initialization')
     else:
         parser.add_argument('--out_name', required=True, type=str, help='Name used to output files on inference mode.')
     parser.add_argument('--save_dir', required=True, type=str, help='{} this directory'.format('Save model in' if train else 'Load model from'))

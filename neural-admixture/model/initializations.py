@@ -7,7 +7,7 @@ import time
 import torch
 from collections.abc import Iterable
 from sklearn.cluster import KMeans, MiniBatchKMeans, kmeans_plusplus
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, TruncatedSVD
 
 
 logging.basicConfig(level=logging.INFO)
@@ -18,7 +18,7 @@ def pca_plot(X_pca, path):
     plt.scatter(X_pca[:,0], X_pca[:,1], s=.9, c='black')
     plt.xticks([])
     plt.yticks([])
-    plt.title('Training data projected onto first two principal components')
+    plt.title('Training data projected onto first two components')
     plt.savefig(path)
     log.info('Plot rendered.')
     return
@@ -177,16 +177,18 @@ class AdmixtureInitialization(object):
 
 class PCKMeansInitialization(object):
     @classmethod
-    def get_decoder_init(cls, X, K, path, run_name):
+    def get_decoder_init(cls, X, K, path, run_name, n_components):
         log.info('Running PC-KMeans initialization...')
         t0 = time.time()
         try:
             with open(path, 'rb') as fb:
                 pca_obj = pickle.load(fb)
-            log.info('PCA loaded.') 
+            log.info('PCA loaded.')
+            if pca_obj.n_components_ != n_components:
+                raise FileNotFoundError
         except FileNotFoundError as fnfe:
-            log.info('PCA object not found. Performing PCA...')
-            pca_obj = PCA(n_components=2, random_state=42)
+            log.info(f'{n_components}D PCA object not found. Performing PCA...')
+            pca_obj = PCA(n_components=n_components, random_state=42)
             pca_obj.fit(X)
             with open(path, 'wb') as fb:
                 pickle.dump(pca_obj, fb)
@@ -201,7 +203,7 @@ class PCKMeansInitialization(object):
             centers = np.concatenate([obj.cluster_centers_ for obj in k_means_objs])
             P_init = torch.tensor(pca_obj.inverse_transform(centers), dtype=torch.float32).view(sum(K), -1)
         else:
-            k_means_obj = KMeans(n_clusters=K, random_state=42, n_init=10, max_iter=10)
+            k_means_obj = KMeans(n_clusters=K, random_state=42, n_init=10, max_iter=10).fit(X_tsvd)
             P_init = torch.tensor(pca_obj.inverse_transform(k_means_obj.cluster_centers_), dtype=torch.float32).view(K, -1)
         te = time.time()
         log.info('Weights initialized in {} seconds.'.format(te-t0))
@@ -212,6 +214,49 @@ class PCKMeansInitialization(object):
             pca_plot(X_pca, plot_save_path)
         except Exception as e:
             log.warn(f'Could not render PCA plot: {e}')
+            log.info('Resuming...')
+        return P_init
+
+
+class TSVDKMeansInitialization(object):
+    @classmethod
+    def get_decoder_init(cls, X, K, path, run_name, n_components):
+        log.info('Running TSVD-KMeans initialization...')
+        t0 = time.time()
+        try:
+            with open(path, 'rb') as fb:
+                tsvd_obj = pickle.load(fb)
+            log.info('TSVD loaded.')
+            if tsvd_obj.components_.shape[0] != n_components:
+                raise FileNotFoundError
+        except FileNotFoundError as fnfe:
+            log.info(f'{n_components}D TSVD object not found. Performing TSVD...')
+            tsvd_obj = TruncatedSVD(n_components=n_components, random_state=42)
+            tsvd_obj.fit(X)
+            with open(path, 'wb') as fb:
+                pickle.dump(tsvd_obj, fb)
+        except Exception as e:
+            raise e
+        assert tsvd_obj.components_.shape[1] == X.shape[1], 'Computed TSVD and training data do not have same number of SNPs' 
+        log.info('Projecting data...')
+        X_tsvd = tsvd_obj.transform(X)
+        log.info('Running KMeans on projected data...')
+        if isinstance(K, Iterable):
+            k_means_objs = [KMeans(n_clusters=i, random_state=42, n_init=10, max_iter=10).fit(X_tsvd) for i in K]
+            centers = np.concatenate([obj.cluster_centers_ for obj in k_means_objs])
+            P_init = torch.tensor(tsvd_obj.inverse_transform(centers), dtype=torch.float32).view(sum(K), -1)
+        else:
+            k_means_obj = KMeans(n_clusters=K, random_state=42, n_init=10, max_iter=10).fit(X_tsvd)
+            P_init = torch.tensor(tsvd_obj.inverse_transform(k_means_obj.cluster_centers_), dtype=torch.float32).view(K, -1)
+        te = time.time()
+        log.info('Weights initialized in {} seconds.'.format(te-t0))
+        log.info('Rendering TSVD plot...')
+        try:
+            save_root = '/'.join(path.split('/')[:-1]) if len(path.split('/')) > 1 else '.'
+            plot_save_path = f'{save_root}/{run_name}_training_tsvd.png'
+            pca_plot(X_tsvd, plot_save_path)
+        except Exception as e:
+            log.warn(f'Could not render TSVD plot: {e}')
             log.info('Resuming...')
         return P_init
         

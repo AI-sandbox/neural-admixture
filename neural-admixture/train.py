@@ -30,6 +30,7 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
     init_file = args.init_file
     supervised = bool(args.supervised)
     decoder_init = args.decoder_init if not supervised else 'supervised'
+    n_components = int(args.pca_components)
     name = args.name
     if args.k is not None:
         Ks = [int(args.k)]
@@ -58,7 +59,7 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
         init_file = f'{run_name}.pkl'
     init_path = f'{save_dir}/{init_file}'
     if linear:
-        P_init = switchers['initializations'][decoder_init](trX, trY, Ks, batch_size, seed, init_path, run_name)
+        P_init = switchers['initializations'][decoder_init](trX, trY, Ks, batch_size, seed, init_path, run_name, n_components)
     else:
         P_init = None
         log.info('Non-linear decoder weights will be randomly initialized.')
