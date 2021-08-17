@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 def fit_model(trX, args, valX=None, trY=None, valY=None):
     switchers = Switchers.get_switchers()
-    num_max_epochs = args.epochs
+    num_max_epochs = args.max_epochs
     batch_size = args.batch_size
     learning_rate = args.learning_rate
     save_dir = args.save_dir
@@ -31,6 +31,7 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
     supervised = bool(args.supervised)
     decoder_init = args.decoder_init if not supervised else 'supervised'
     n_components = int(args.pca_components)
+    tol = float(args.tol)
     name = args.name
     if args.k is not None:
         Ks = [int(args.k)]
@@ -90,7 +91,7 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
     actual_num_epochs = model.launch_training(trX, optimizer, loss_f, num_max_epochs, device, valX=valX,
                        batch_size=batch_size, display_logs=display_logs, save_every=save_every,
                        save_path=save_path, trY=trY, valY=valY, shuffle=shuffle,
-                       seed=seed, log_to_wandb=log_to_wandb)
+                       seed=seed, log_to_wandb=log_to_wandb, tol=tol)
     elapsed_time = t.stop()
     if log_to_wandb:
         wandb.run.summary['total_elapsed_time'] = elapsed_time

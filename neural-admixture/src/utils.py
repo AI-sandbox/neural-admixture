@@ -14,7 +14,7 @@ def parse_args(train=True):
     parser = argparse.ArgumentParser()
     if train:
         parser.add_argument('--learning_rate', required=False, default=0.0001, type=float, help='Learning rate')
-        parser.add_argument('--epochs', required=False, type=int, default=10, help='Number of epochs')
+        parser.add_argument('--max_epochs', required=False, type=int, default=50, help='Maximum number of epochs')
         parser.add_argument('--decoder_init', required=False, type=str, default = 'pckmeans', choices=['random', 'mean_SNPs', 'mean_random', 'kmeans',
                                                                                                        'minibatch_kmeans', 'kmeans++', 'binomial',
                                                                                                        'pca', 'admixture', 'pckmeans', 'supervised',
@@ -44,6 +44,8 @@ def parse_args(train=True):
         parser.add_argument('--wandb_project', required=False, type=str, help='wandb project')
         parser.add_argument('--pca_path', required=False, type=str, help='Path containing PCA object, used for plots')
         parser.add_argument('--pca_components', required=False, type=int, default=2, help='Number of components to use for the PCKMeans initialization')
+        parser.add_argument('--tol', required=False, type=float, default=1e-6, help='Convergence criterion: will stop when difference in objective function between two iterations is smaller than this.')
+
     else:
         parser.add_argument('--out_name', required=True, type=str, help='Name used to output files on inference mode.')
     parser.add_argument('--save_dir', required=True, type=str, help='{} this directory'.format('Save model in' if train else 'Load model from'))
