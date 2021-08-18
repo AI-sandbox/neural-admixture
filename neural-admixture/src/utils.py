@@ -1,12 +1,14 @@
 import allel
 import argparse
 import h5py
+import gc
 import logging
 import numpy as np
 import os
 import sys
 import torch
 import wandb
+from pandas_plink import read_plink
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -14,10 +16,11 @@ def parse_args(train=True):
     parser = argparse.ArgumentParser()
     if train:
         parser.add_argument('--learning_rate', required=False, default=0.0001, type=float, help='Learning rate')
-        parser.add_argument('--epochs', required=False, type=int, default=10, help='Number of epochs')
+        parser.add_argument('--max_epochs', required=False, type=int, default=50, help='Maximum number of epochs')
         parser.add_argument('--decoder_init', required=False, type=str, default = 'pckmeans', choices=['random', 'mean_SNPs', 'mean_random', 'kmeans',
                                                                                                        'minibatch_kmeans', 'kmeans++', 'binomial',
-                                                                                                       'pca', 'admixture', 'pckmeans', 'supervised'],
+                                                                                                       'pca', 'admixture', 'pckmeans', 'supervised',
+                                                                                                       'tsvdkmeans'],
                                                                                                        help='Decoder initialization (overriden if supervised)')
         parser.add_argument('--optimizer', required=False, default='adam', type=str, choices=['adam', 'sgd'], help='Optimizer')
         parser.add_argument('--save_every', required=False, default=50, type=int, help='Save every this number of epochs')
@@ -42,6 +45,9 @@ def parse_args(train=True):
         parser.add_argument('--wandb_user', required=False, type=str, help='wandb user')
         parser.add_argument('--wandb_project', required=False, type=str, help='wandb project')
         parser.add_argument('--pca_path', required=False, type=str, help='Path containing PCA object, used for plots')
+        parser.add_argument('--pca_components', required=False, type=int, default=2, help='Number of components to use for the PCKMeans initialization')
+        parser.add_argument('--tol', required=False, type=float, default=1e-6, help='Convergence criterion: will stop when difference in objective function between two iterations is smaller than this.')
+
     else:
         parser.add_argument('--out_name', required=True, type=str, help='Name used to output files on inference mode.')
     parser.add_argument('--save_dir', required=True, type=str, help='{} this directory'.format('Save model in' if train else 'Load model from'))
@@ -90,8 +96,16 @@ def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
         f_tr = allel.read_vcf(tr_file)
         log.info('Processing data...')
         tr_snps = np.sum(f_tr['calldata/GT'], axis=2).T/2
+    elif tr_file.endswith('.bed'):
+        log.info('Input format is BED.')
+        log.info('Reading data...')
+        _, _, G = read_plink('.'.join(tr_file.split('.')[:-1]))
+        log.info('Processing data...')
+        tr_snps = (G.T/2).compute()
+        del G
+        gc.collect()
     else:
-        log.error('Unrecognized file format. Make sure file ends with .h5, .hdf5, .vcf or .vcf.gz .')
+        log.error('Unrecognized file format. Make sure file ends with .h5 | .hdf5 | .vcf | .vcf.gz | .bed')
         sys.exit(1)
 
     # Validation data
@@ -101,13 +115,21 @@ def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
             f_val = h5py.File(val_file, 'r')
             val_snps = f_val['snps']
         elif val_file.endswith('.vcf') or val_file.endswith('.vcf.gz'):
-            log.info('Input format is VCF.')
+            log.info('Validation input format is VCF.')
             log.info('Reading validation data...')
             f_val = allel.read_vcf(val_file)
             log.info('Processing validation data...')
             val_snps = np.sum(f_val['calldata/GT'], axis=2).T/2
+        elif tr_file.endswith('.bed'):
+            log.info('Validation input format is BED.')
+            log.info('Reading validation data...')
+            _, _, G = read_plink('.'.join(val_file.split('.')[:-1]))
+            log.info('Processing validation data...')
+            val_snps = (G.T/2).compute()
+            del G
+            gc.collect()
         else:
-            log.error('Unrecognized validation file format. Make sure file ends with .h5, .hdf5, .vcf or .vcf.gz .')
+            log.error('Unrecognized validation file format. Make sure file ends with .h5 | .hdf5 | .vcf | .vcf.gz | .bed')
             sys.exit(1)
     if tr_pops_f:
         with open(tr_pops_f, 'r') as fb:

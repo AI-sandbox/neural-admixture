@@ -52,9 +52,12 @@ class NeuralAdmixture(nn.Module):
     def launch_training(self, trX, optimizer, loss_f, num_epochs,
                         device, batch_size=0, valX=None, display_logs=True,
                         save_every=10, save_path='../outputs/model.pt',
-                        trY=None, valY=None, seed=42, shuffle=False, log_to_wandb=False):
+                        trY=None, valY=None, seed=42, shuffle=False, log_to_wandb=False,
+                        tol=1e-5):
         random.seed(seed)
         loss_f_supervised, trY_num, valY_num = None, None, None
+        tr_losses, val_losses = [], []
+        log.info(f'Will stop optimization when difference in objective function between two subsequent iterations is < {tol} or after {num_epochs} epochs.')
         if self.supervised:
             log.info('Going to train on supervised mode.')
             assert trY is not None and valY is not None, 'Ground truth ancestries needed for supervised mode'
@@ -66,17 +69,25 @@ class NeuralAdmixture(nn.Module):
             loss_f_supervised = nn.CrossEntropyLoss(reduction='mean')
         for ep in range(num_epochs):
             tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, shuffle, loss_f_supervised, trY_num, valY_num)
+            tr_losses.append(tr_loss)
+            val_losses.append(val_loss)
             assert not math.isnan(tr_loss), 'Training loss is NaN'
             if log_to_wandb and val_loss is not None:
                 wandb.log({"tr_loss": tr_loss, "val_loss": val_loss})
             elif log_to_wandb and val_loss is None:
                 wandb.log({"tr_loss": tr_loss})
+            tr_diff = tr_losses[-2]-tr_losses[-1] if len(tr_losses) > 1 else 'NaN'
+            val_diff = val_losses[-2]-val_losses[-1] if val_loss is not None and len(val_losses) > 1 else 'NaN'
             if display_logs:
-                log.info(f'[METRICS] EPOCH {ep+1}: mean training loss: {tr_loss}')
+                log.info(f'[METRICS] EPOCH {ep+1}: mean training loss: {tr_loss}, diff: {tr_diff}')
                 if val_loss is not None:
-                    log.info(f'[METRICS] EPOCH {ep+1}: mean validation loss: {val_loss}')
+                    log.info(f'[METRICS] EPOCH {ep+1}: mean validation loss: {val_loss}, diff: {val_diff}')
             if save_every*ep > 0 and ep % save_every == 0:
                 torch.save(self.state_dict(), save_path)
+            if ep > 0 and tol > 0 and self._has_converged(val_diff if val_diff != 'NaN' else tr_diff, tol):
+                log.info(f'Convergence criteria met. Stopping fit after {ep+1} epochs...')
+                return ep+1
+        log.info(f'Max epochs reached. Stopping fit...')
         return ep+1
 
     def _get_encoder_norm(self):
@@ -135,6 +146,10 @@ class NeuralAdmixture(nn.Module):
             return tr_loss / trX.shape[0], val_loss / valX.shape[0]
         return tr_loss / trX.shape[0], None
 
+    @staticmethod
+    def _has_converged(diff, tol):
+        return diff < tol
+        
     @staticmethod
     def _hudsons_fst(pop1, pop2):
         '''

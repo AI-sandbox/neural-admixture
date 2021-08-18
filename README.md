@@ -25,12 +25,12 @@ We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `con
 
 ## Running Neural ADMIXTURE
 
-To train a model from scratch, simply invoke the following commands from the root directory of the project. For more info about all the arguments, please run `neural-admixture --help`. If training a single-head version of the network suffices, please use the flag `--k` instead of `--min_k` and `--max_k`. Note that only HDF5 and VCF files are supported as of now. The
+To train a model from scratch, simply invoke the following commands from the root directory of the project. For more info about all the arguments, please run `neural-admixture --help`. If training a single-head version of the network suffices, please use the flag `--k` instead of `--min_k` and `--max_k`. Note that VCF, BED and HDF5 files are supported as of now. 
 
 For unsupervised Neural ADMIXTURE (single-head):
 
 ```console
-> neural-admixture --k K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_file INIT_FI
+> neural-admixture --k K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_file INIT_FILE
 ````
 
 For unsupervised Neural ADMIXTURE (multi-head):
@@ -54,10 +54,10 @@ As an example, the following ADMIXTURE call
 would be mimicked in Neural ADMIXTURE by running
 
 ```console
-> neural-admixture --k 8 --data_path snps_data.vcf --save_dir SAVE_PATH --init_file INIT_FILE --name snps_data --seed 42
+> neural-admixture --k 8 --data_path snps_data.bed --save_dir SAVE_PATH --init_file INIT_FILE --name snps_data --seed 42
 ```
 
-with some parameters such as the number of epochs, the decoder initialization or the save directories not having a direct equivalent. Note that if you have BED files, you should convert them to VCF using, for example, [plink](https://www.cog-genomics.org/plink/2.0/).
+with some parameters such as the decoder initialization or the save directories not having a direct equivalent.
 
 Several files will be output to the `SAVE_PATH` directory (the `name` parameter will be used to create the whole filenames):
 - If the unsupervised version is run, a `Pickle` binary file containing the PCA object (using the `init_name` parameter), as well as an image file containing a PCA plot.
@@ -82,8 +82,10 @@ For this command to work, files `./outputs/nadm_test.pt` and `./outputs/nadm_tes
 
 ## Advanced options
 
-- `batch_size`: number of samples used at every update. If you have memory issues, try setting a lower batch_size. Defaults to 200.
-- `epochs`: number of times the whole training dataset is used to update the weights. Try setting a higher value if convergence is not met. Can be lowered in the supervised setting. Defaults to 10. 
+- `batch_size`: number of samples used at every update. If you have memory issues, try setting a lower batch size. Defaults to 200.
+- `pca_components`: dimension of the PCA projection for the PC-KMeans initialization. Defaults to 2.
+- `max_epochs`: maximum number of times the whole training dataset is used to update the weights. Defaults to 50. 
+- `tol`: will stop optimization when difference in objective function between two iterations is smaller than this value. Defaults to 1e-6.
 - `decoder_init`: decoder initialization method. It is overriden to the `supervised` method if the program is run in supervised mode. While other methods are available, we recommend using the default. Defaults to `pckmeans`.
 - `learning_rate`: dictates how big an update to the weights will be. If you find the loss function oscillating, try setting a lower value. If convergence is slow, try setting a higher value. Defaults to 0.0001.
 - `seed`: seed for replication purposes, similar to ADMIXTURE's. Defaults to 42.

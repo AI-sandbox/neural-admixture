@@ -18,17 +18,18 @@ class Switchers(object):
     }
 
     _initializations = {
-        'random': lambda X, y, k, batch_size, seed, path, run_name: None,
-        'mean_SNPs': lambda X, y, k, batch_size, seed, path, run_name: init.SNPsMeanInitialization.get_decoder_init(X, k),
-        'mean_random': lambda X, y, k, batch_size, seed, path, run_name: init.RandomMeanInitialization.get_decoder_init(X, k),
-        'kmeans': lambda X, y, k, batch_size, seed, path, run_name: init.KMeansInitialization.get_decoder_init(X, k, False, False, batch_size, seed),
-        'minibatch_kmeans': lambda X, y, k, batch_size, seed, path, run_name: init.KMeansInitialization.get_decoder_init(X, k, True, False, batch_size, seed),
-        'kmeans++': lambda X, y, k, batch_size, seed, path, run_name: init.KMeansPlusPlusInitialization.get_decoder_init(X, k, seed),
-        'binomial': lambda X, y, k, batch_size, seed, path, run_name: init.BinomialInitialization.get_decoder_init(X, k),
-        'pca': lambda X, y, k, batch_size, seed, path, run_name: init.PCAInitialization.get_decoder_init(X, k),
-        'admixture': lambda X, y, k, batch_size, seed, path, run_name: init.AdmixtureInitialization.get_decoder_init(X, k, path),
-        'pckmeans': lambda X, y, k, batch_size, seed, path, run_name: init.PCKMeansInitialization.get_decoder_init(X, k, path, run_name),
-        'supervised': lambda X, y, k, batch_size, seed, path, run_name: init.SupervisedInitialization.get_decoder_init(X, y, k)
+        'random': lambda X, y, k, batch_size, seed, path, run_name, n_comp: None,
+        'mean_SNPs': lambda X, y, k, batch_size, seed, path, run_name, n_comp: init.SNPsMeanInitialization.get_decoder_init(X, k),
+        'mean_random': lambda X, y, k, batch_size, seed, path, run_name, n_comp: init.RandomMeanInitialization.get_decoder_init(X, k),
+        'kmeans': lambda X, y, k, batch_size, seed, path, run_name, n_comp: init.KMeansInitialization.get_decoder_init(X, k, False, False, batch_size, seed),
+        'minibatch_kmeans': lambda X, y, k, batch_size, seed, path, run_name, n_comp: init.KMeansInitialization.get_decoder_init(X, k, True, False, batch_size, seed),
+        'kmeans++': lambda X, y, k, batch_size, seed, path, run_name, n_comp: init.KMeansPlusPlusInitialization.get_decoder_init(X, k, seed),
+        'binomial': lambda X, y, k, batch_size, seed, path, run_name, n_comp: init.BinomialInitialization.get_decoder_init(X, k),
+        'pca': lambda X, y, k, batch_size, seed, path, run_name, n_comp: init.PCAInitialization.get_decoder_init(X, k),
+        'admixture': lambda X, y, k, batch_size, seed, path, run_name, n_comp: init.AdmixtureInitialization.get_decoder_init(X, k, path),
+        'pckmeans': lambda X, y, k, batch_size, seed, path, run_name, n_comp: init.PCKMeansInitialization.get_decoder_init(X, k, path, run_name, n_comp),
+        'supervised': lambda X, y, k, batch_size, seed, path, run_name, n_comp: init.SupervisedInitialization.get_decoder_init(X, y, k),
+        'tsvdkmeans': lambda X, y, k, batch_size, seed, path, run_name, n_comp: init.TSVDKMeansInitialization.get_decoder_init(X, k, path, run_name, n_comp)
     }
 
     _optimizers = {
