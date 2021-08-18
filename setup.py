@@ -17,6 +17,7 @@ setup(
                       'h5py==3.1.0',
                       'matplotlib==3.3.4',
                       'pandas==1.2.4',
+                      'pandas_plink==2.2.9',
                       'scikit-allel==1.3.5',
                       'scikit-learn==0.24.1',
                       'setuptools==50.3.1',
