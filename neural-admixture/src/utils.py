@@ -101,7 +101,7 @@ def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
         log.info('Reading data...')
         _, _, G = read_plink('.'.join(tr_file.split('.')[:-1]))
         log.info('Processing data...')
-        tr_snps = (G.T/2).compute()
+        tr_snps = ((2-G).T/2).compute()
         del G
         gc.collect()
     else:
@@ -125,7 +125,7 @@ def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
             log.info('Reading validation data...')
             _, _, G = read_plink('.'.join(val_file.split('.')[:-1]))
             log.info('Processing validation data...')
-            val_snps = (G.T/2).compute()
+            val_snps = ((2-G).T/2).compute()
             del G
             gc.collect()
         else:
