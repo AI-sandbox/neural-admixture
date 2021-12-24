@@ -3,56 +3,55 @@ import logging
 import math
 import numpy as np
 import random
+import sys
 import torch
 import torch.nn as nn
 import wandb
 from .modules import NeuralDecoder, NeuralEncoder, ZeroOneClipper
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 class NeuralAdmixture(nn.Module):
-    def __init__(self, ks, num_features, encoder_activation=nn.ReLU(),
-                 P_init=None, lambda_l2=0, linear=True, hidden_size=512,
+    def __init__(self, ks, num_features, encoder_activation=nn.GELU(),
+                 P_init=None, lambda_l2=0.0005, hidden_size=64,
                  freeze_decoder=False, supervised=False):
         super().__init__()
         self.ks = ks
         self.num_features = num_features
         self.hidden_size = hidden_size
         self.encoder_activation = encoder_activation
-        self.linear = linear
         self.supervised = supervised
         self.freeze_decoder = freeze_decoder
         self.batch_norm = nn.BatchNorm1d(self.num_features)
-        self.lambda_l2 = lambda_l2 if lambda_l2 > 1e-6 else 0
+        self.lambda_l2 = lambda_l2 if lambda_l2 > 1e-8 else 0
         self.softmax = nn.Softmax(dim=1)
         self.common_encoder = nn.Sequential(
                 nn.Linear(self.num_features, self.hidden_size, bias=True),
                 self.encoder_activation,
         )
         self.multihead_encoder = NeuralEncoder(self.hidden_size, self.ks)
-        if self.linear:
-            self.decoders = NeuralDecoder(self.ks, num_features, bias=False, inits=P_init, freeze=self.freeze_decoder)
-            self.clipper = ZeroOneClipper()
-            self.decoders.decoders.apply(self.clipper)
-        else:
-            raise NotImplementedError
+        self.decoders = NeuralDecoder(self.ks, num_features, bias=False, inits=P_init, freeze=self.freeze_decoder)
+        self.clipper = ZeroOneClipper()
+        self.decoders.decoders.apply(self.clipper)
 
-    def forward(self, X, only_assignments=False):
+    def forward(self, X, only_assignments=False, only_hidden_states=False):
         X = self.batch_norm(X)
         enc = self.common_encoder(X)
         del X
         hid_states = self.multihead_encoder(enc)
+        if only_hidden_states:
+            return hid_states
         probs = [self.softmax(h) for h in hid_states]
         if only_assignments:
             return probs
         del enc
-        return self.decoders(probs), hid_states
+        return self.decoders(probs), probs
 
     def launch_training(self, trX, optimizer, loss_f, num_epochs,
-                        device, batch_size=0, valX=None, display_logs=True,
+                        device, batch_size=0, valX=None,
                         save_every=10, save_path='../outputs/model.pt',
-                        trY=None, valY=None, seed=42, shuffle=False, log_to_wandb=False,
+                        trY=None, valY=None, seed=42, shuffle=True, log_to_wandb=False,
                         tol=1e-5):
         random.seed(seed)
         loss_f_supervised, trY_num, valY_num = None, None, None
@@ -78,34 +77,34 @@ class NeuralAdmixture(nn.Module):
                 wandb.log({"tr_loss": tr_loss})
             tr_diff = tr_losses[-2]-tr_losses[-1] if len(tr_losses) > 1 else 'NaN'
             val_diff = val_losses[-2]-val_losses[-1] if val_loss is not None and len(val_losses) > 1 else 'NaN'
-            if display_logs:
-                log.info(f'[METRICS] EPOCH {ep+1}: mean training loss: {tr_loss}, diff: {tr_diff}')
-                if val_loss is not None:
-                    log.info(f'[METRICS] EPOCH {ep+1}: mean validation loss: {val_loss}, diff: {val_diff}')
+            log.info(f'[METRICS] EPOCH {ep+1}: mean training loss: {tr_loss}, diff: {tr_diff}')
+            if val_loss is not None:
+                log.info(f'[METRICS] EPOCH {ep+1}: mean validation loss: {val_loss}, diff: {val_diff}')
             if save_every*ep > 0 and ep % save_every == 0:
                 torch.save(self.state_dict(), save_path)
-            if ep > 0 and tol > 0 and self._has_converged(val_diff if val_diff != 'NaN' else tr_diff, tol):
+            if ep > 0 and tol > 0 and self._has_converged(tr_diff, tol):
                 log.info(f'Convergence criteria met. Stopping fit after {ep+1} epochs...')
                 return ep+1
         log.info(f'Max epochs reached. Stopping fit...')
         return ep+1
 
-    def _get_encoder_norm(self):
-        return torch.norm(list(self.common_encoder.parameters())[0])
+    def _get_encoder_norm(self, p=2):
+        shared_params = torch.cat([x.view(-1) for x in self.common_encoder.parameters()])
+        multihead_params = torch.cat([x.view(-1) for x in self.multihead_encoder.parameters()])
+        return torch.norm(shared_params, p)+torch.norm(multihead_params, p)
 
     def _run_step(self, X, optimizer, loss_f, loss_f_supervised=None, y=None):
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)
         recs, hid_states = self(X)
-        loss = sum((loss_f(rec, X) for rec in recs)) if self.linear else loss_f(recs, X)
+        loss = sum((loss_f(rec, X) for rec in recs))
         if loss_f_supervised is not None:  # Currently only implemented for single-head architecture!
             loss += sum((loss_f_supervised(h, y) for h in hid_states))
-        if self.lambda_l2 > 1e-6:
-            loss += self.lambda_l2*self._get_encoder_norm()**2
+        if self.lambda_l2 > 0:
+            loss += self.lambda_l2*self._get_encoder_norm(2)**2
         del recs, hid_states
         loss.backward()
         optimizer.step()
-        if self.linear:
-            self.decoders.decoders.apply(self.clipper)
+        self.decoders.decoders.apply(self.clipper)
         return loss.item()
     
     def _validate(self, valX, loss_f, batch_size, device, loss_f_supervised=None, y=None):
@@ -115,25 +114,25 @@ class NeuralAdmixture(nn.Module):
                 X = X.to(device)
                 y_b = y_b.to(device) if y_b is not None else None
                 recs, hid_states = self(X)
-                acum_val_loss += sum((loss_f(rec, X).item() for rec in recs)) if self.linear else loss_f(recs, X).item()
+                acum_val_loss += sum((loss_f(rec, X).item() for rec in recs))
                 if loss_f_supervised is not None:
                     acum_val_loss += sum((loss_f_supervised(h, y_b).item() for h in hid_states))
             if self.lambda_l2 > 1e-6:
                 acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2
         return acum_val_loss
 
-    def _batch_generator(self, X, batch_size=0, shuffle=False, y=None):
+    def _batch_generator(self, X, batch_size=0, shuffle=True, y=None):
         idxs = [i for i in range(X.shape[0])]
         if shuffle:
             random.shuffle(idxs)
         if batch_size < 1:
-            yield torch.tensor(X, dtype=torch.float32), torch.tensor(y, dtype=torch.int64) if y is not None else None
+            yield torch.as_tensor(X, dtype=torch.float32), torch.as_tensor(y, dtype=torch.int64) if y is not None else None
         else:
             for i in range(0, X.shape[0], batch_size):
-                yield torch.tensor(X[sorted(idxs[i:i+batch_size])], dtype=torch.float32), torch.tensor(y[sorted(idxs[i:i+batch_size])], dtype=torch.int64) if y is not None else None
+                yield torch.as_tensor(X[sorted(idxs[i:i+batch_size])], dtype=torch.float32), torch.as_tensor(y[sorted(idxs[i:i+batch_size])], dtype=torch.int64) if y is not None else None
 
     def _run_epoch(self, trX, optimizer, loss_f, batch_size, valX,
-                   device, shuffle=False, loss_f_supervised=None,
+                   device, shuffle=True, loss_f_supervised=None,
                    trY=None, valY=None):
         tr_loss, val_loss = 0, None
         self.train()

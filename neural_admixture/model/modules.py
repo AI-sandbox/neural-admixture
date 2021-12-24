@@ -1,8 +1,9 @@
 import logging
+import sys
 import torch
 import torch.nn as nn
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 class ZeroOneClipper(object):
@@ -17,7 +18,11 @@ class NeuralEncoder(nn.Module):
         super().__init__()
         assert sum([k < 2 for k in ks]) == 0, 'Invalid number of clusters. Requirement: k >= 2'
         self.ks = ks
-        self.heads = nn.ModuleList([nn.Linear(input_size, k, bias=True) for k in ks])
+        self.heads = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(input_size, k, bias=True)
+                # nn.BatchNorm1d(k)
+            ) for k in ks])
 
     def _get_head_for_k(self, k):
         return self.heads[k-min(self.ks)]
