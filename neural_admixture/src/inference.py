@@ -5,12 +5,12 @@ import torch
 from model.neural_admixture import NeuralAdmixture
 from src import utils
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 def main():
-    args = utils.parse_args(train=False)
-    log.info('Using {} GPU(s)'.format(torch.cuda.device_count()) if torch.cuda.is_available() else 'No GPUs available.')
+    args = utils.parse_infer_args()
+    log.info('Will use GPU' if torch.cuda.is_available() else 'No GPUs available.')
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     data_file_str = args.data_path
     out_name = args.out_name
@@ -38,6 +38,8 @@ def main():
                         device=device, run_name=out_name,
                         out_path=args.save_dir, only_Q=True)
     log.info('Exiting...')
+    logging.shutdown()
+    return 0
 
 if __name__ == '__main__':
     sys.exit(main())
