@@ -1,3 +1,9 @@
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/neural-admixture)
+![PyPI - Version](https://img.shields.io/pypi/v/neural-admixture)
+![PyPI - License](https://img.shields.io/pypi/l/neural-admixture)
+![PyPI - Status](https://img.shields.io/pypi/status/neural-admixture)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/neural-admixture)
+
 # Neural ADMIXTURE
 
 ![nadm_mna](https://user-images.githubusercontent.com/31998088/147361139-a964ead1-993a-4654-84ee-d3efb850dedc.png)
