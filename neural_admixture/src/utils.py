@@ -57,7 +57,7 @@ def parse_infer_args():
     parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data')
     parser.add_argument('--name', required=True, type=str, help='Trained experiment/model name')
     parser.add_argument('--batch_size', required=False, default=400, type=int, help='Batch size')
-    return parser.parse_args
+    return parser.parse_args()
 
 def initialize_wandb(run_name, trX, valX, args, out_path, silent=True):
     if run_name is None:
