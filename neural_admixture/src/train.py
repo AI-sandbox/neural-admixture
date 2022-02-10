@@ -26,6 +26,7 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
     freeze_decoder = bool(args.freeze_decoder)
     init_file = args.init_file
     supervised = bool(args.supervised)
+    supervised_loss_weight = float(args.supervised_loss_weight)
     decoder_init = args.initialization if not supervised else 'supervised'
     n_components = int(args.pca_components)
     tol = float(args.tol)
@@ -63,10 +64,11 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
                                 encoder_activation=activation,
                                 hidden_size=hidden_size,
                                 freeze_decoder=freeze_decoder,
-                                supervised=supervised)
+                                supervised=supervised,
+                                supervised_loss_weight=supervised_loss_weight)
     model.to(device)
     if log_to_wandb:
-        wandb.watch(model)
+        wandb.watch(model, log='all', log_freq=1)
     
     # Optimizer
     optimizer = switchers['optimizers'][optimizer_str](filter(lambda p: p.requires_grad, model.parameters()), learning_rate)

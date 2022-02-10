@@ -15,13 +15,14 @@ log = logging.getLogger(__name__)
 class NeuralAdmixture(nn.Module):
     def __init__(self, ks, num_features, encoder_activation=nn.GELU(),
                  P_init=None, lambda_l2=0.0005, hidden_size=64,
-                 freeze_decoder=False, supervised=False):
+                 freeze_decoder=False, supervised=False, supervised_loss_weight=.2):
         super().__init__()
         self.ks = ks
         self.num_features = num_features
         self.hidden_size = hidden_size
         self.encoder_activation = encoder_activation
         self.supervised = supervised
+        self.supervised_loss_weight = supervised_loss_weight
         self.freeze_decoder = freeze_decoder
         self.batch_norm = nn.BatchNorm1d(self.num_features)
         self.lambda_l2 = lambda_l2 if lambda_l2 > 1e-8 else 0
@@ -98,7 +99,7 @@ class NeuralAdmixture(nn.Module):
         recs, hid_states = self(X)
         loss = sum((loss_f(rec, X) for rec in recs))
         if loss_f_supervised is not None:  # Currently only implemented for single-head architecture!
-            loss += sum((loss_f_supervised(h, y) for h in hid_states))
+            loss += sum((self.supervised_loss_weight*loss_f_supervised(h, y) for h in hid_states))
         if self.lambda_l2 > 0:
             loss += self.lambda_l2*self._get_encoder_norm(2)**2
         del recs, hid_states
@@ -116,7 +117,7 @@ class NeuralAdmixture(nn.Module):
                 recs, hid_states = self(X)
                 acum_val_loss += sum((loss_f(rec, X).item() for rec in recs))
                 if loss_f_supervised is not None:
-                    acum_val_loss += sum((loss_f_supervised(h, y_b).item() for h in hid_states))
+                    acum_val_loss += sum((self.supervised_loss_weight*loss_f_supervised(h, y_b).item() for h in hid_states))
             if self.lambda_l2 > 1e-6:
                 acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2
         return acum_val_loss

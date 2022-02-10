@@ -47,6 +47,7 @@ def parse_train_args():
     parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data')
     parser.add_argument('--name', required=True, type=str, help='Experiment/model name')
     parser.add_argument('--batch_size', required=False, default=400, type=int, help='Batch size')
+    parser.add_argument('--supervised_loss_weight', required=False, default=0.2, type=float, help='Weight given to the supervised loss')
     return parser.parse_args()
 
 def parse_infer_args():
