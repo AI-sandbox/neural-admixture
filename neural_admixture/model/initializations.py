@@ -111,7 +111,7 @@ class SupervisedInitialization(object):
         t0 = time.time()
         k = K[0]
         ancestry_dict = {anc: idx for idx, anc in enumerate(sorted(np.unique(y)))}
-        assert len(ancestry_dict) == k, 'Number of ancestries in training ground truth is not equal to the value of k'
+        assert len(ancestry_dict) == k, f'Number of ancestries in training ground truth ({len(ancestry_dict)}) is not equal to the value of K ({k})'
         to_idx_mapper = np.vectorize(lambda x: ancestry_dict[x])
         y_num = to_idx_mapper(y[:])
         X_mem = X[:,:]

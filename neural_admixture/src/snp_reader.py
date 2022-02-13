@@ -45,8 +45,8 @@ class SNPReader:
         npy = np.load(file)
         assert len(npy.shape) in [2, 3]
         if len(npy.shape) == 2:
-            return npy
-        return npy.sum(axis=2)
+            return npy/2
+        return npy.sum(axis=2)/2
     
     def read_data(self, file):
         if file.endswith('.vcf') or file.endswith('.vcf.gz'):
@@ -62,4 +62,5 @@ class SNPReader:
         else:
             log.error('Invalid format. Unrecognized file format. Make sure file ends with .vcf | .vcf.gz | .bed | .pgen | .h5 | .hdf5 | .npy')
             sys.exit(1)
+        assert int(G.min()) == 0 and int(G.max()) == 1, 'Only biallelic SNPs are supported. Please make sure multiallelic sites have been removed.'
         return G if np.mean(G) < 0.5 else 1-G

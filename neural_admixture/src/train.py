@@ -95,7 +95,6 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
 
 def main():
     args = utils.parse_train_args()
-    switchers = Switchers.get_switchers()
     tr_file, val_file = args.data_path, args.validation_data_path
     tr_pops_f, val_pops_f = args.populations_path, args.validation_populations_path
 
