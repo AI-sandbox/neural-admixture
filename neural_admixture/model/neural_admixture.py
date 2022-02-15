@@ -15,13 +15,14 @@ log = logging.getLogger(__name__)
 class NeuralAdmixture(nn.Module):
     def __init__(self, ks, num_features, encoder_activation=nn.GELU(),
                  P_init=None, lambda_l2=0.0005, hidden_size=64,
-                 freeze_decoder=False, supervised=False):
+                 freeze_decoder=False, supervised=False, supervised_loss_weight=0.05):
         super().__init__()
         self.ks = ks
         self.num_features = num_features
         self.hidden_size = hidden_size
         self.encoder_activation = encoder_activation
         self.supervised = supervised
+        self.supervised_loss_weight = supervised_loss_weight
         self.freeze_decoder = freeze_decoder
         self.batch_norm = nn.BatchNorm1d(self.num_features)
         self.lambda_l2 = lambda_l2 if lambda_l2 > 1e-8 else 0
@@ -59,12 +60,12 @@ class NeuralAdmixture(nn.Module):
         log.info(f'Will stop optimization when difference in objective function between two subsequent iterations is < {tol} or after {num_epochs} epochs.')
         if self.supervised:
             log.info('Going to train on supervised mode.')
-            assert trY is not None and valY is not None, 'Ground truth ancestries needed for supervised mode'
+            assert trY is not None, 'Training ground truth ancestries needed for supervised mode'
             ancestry_dict = {anc: idx for idx, anc in enumerate(sorted(np.unique(trY)))}
             assert len(ancestry_dict) == self.ks[0], 'Number of ancestries in training ground truth is not equal to the value of k'
             to_idx_mapper = np.vectorize(lambda x: ancestry_dict[x])
             trY_num = to_idx_mapper(trY[:])
-            valY_num = to_idx_mapper(valY[:])
+            valY_num = to_idx_mapper(valY[:]) if valY is not None else None
             loss_f_supervised = nn.CrossEntropyLoss(reduction='mean')
         for ep in range(num_epochs):
             tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, shuffle, loss_f_supervised, trY_num, valY_num)
@@ -98,7 +99,7 @@ class NeuralAdmixture(nn.Module):
         recs, hid_states = self(X)
         loss = sum((loss_f(rec, X) for rec in recs))
         if loss_f_supervised is not None:  # Currently only implemented for single-head architecture!
-            loss += sum((loss_f_supervised(h, y) for h in hid_states))
+            loss += sum((self.supervised_loss_weight*loss_f_supervised(h, y) for h in hid_states))
         if self.lambda_l2 > 0:
             loss += self.lambda_l2*self._get_encoder_norm(2)**2
         del recs, hid_states
@@ -115,8 +116,8 @@ class NeuralAdmixture(nn.Module):
                 y_b = y_b.to(device) if y_b is not None else None
                 recs, hid_states = self(X)
                 acum_val_loss += sum((loss_f(rec, X).item() for rec in recs))
-                if loss_f_supervised is not None:
-                    acum_val_loss += sum((loss_f_supervised(h, y_b).item() for h in hid_states))
+                if loss_f_supervised is not None and y_b is not None:
+                    acum_val_loss += sum((self.supervised_loss_weight*loss_f_supervised(h, y_b).item() for h in hid_states))
             if self.lambda_l2 > 1e-6:
                 acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2
         return acum_val_loss

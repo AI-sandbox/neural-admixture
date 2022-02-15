@@ -34,22 +34,33 @@ class SNPReader:
         except Exception as e:
             raise e
         file_prefix = file.split('.pgen')[0]
-        pgen, psam, pvar = str.encode(file), f'{file_prefix}.psam', f'{file_prefix}.pvar' # Genotype, sample, variant files
+        pgen, _, _ = str.encode(file), f'{file_prefix}.psam', f'{file_prefix}.pvar' # Genotype, sample, variant files
         pgen_reader = pg.PgenReader(pgen)
         calldata = np.ascontiguousarray(np.empty((pgen_reader.get_variant_ct(), 2*pgen_reader.get_raw_sample_ct())).astype(np.int32))
         pgen_reader.read_alleles_range(0, pgen_reader.get_variant_ct(), calldata)
         return (calldata[:,::2]+calldata[:,1::2]).T/2
     
+    def _read_npy(self, file):
+        log.info('Input format is NPY.')
+        npy = np.load(file)
+        assert len(npy.shape) in [2, 3]
+        if len(npy.shape) == 2:
+            return npy/2
+        return npy.sum(axis=2)/2
+    
     def read_data(self, file):
         if file.endswith('.vcf') or file.endswith('.vcf.gz'):
             G = self._read_vcf(file)
         elif file.endswith('.h5') or file.endswith('.hdf5'):
-            G =  self._read_hdf5(file)
+            G = self._read_hdf5(file)
         elif file.endswith('.bed'):
             G = self._read_bed(file)
         elif file.endswith('.pgen'):
             G = self._read_pgen(file)
+        elif file.endswith('.npy'):
+            G = self._read_npy(file)
         else:
-            log.error('Invalid format. Unrecognized file format. Make sure file ends with .vcf | .vcf.gz | .bed | .pgen | .h5 | .hdf5')
+            log.error('Invalid format. Unrecognized file format. Make sure file ends with .vcf | .vcf.gz | .bed | .pgen | .h5 | .hdf5 | .npy')
             sys.exit(1)
+        assert int(G.min()) == 0 and int(G.max()) == 1, 'Only biallelic SNPs are supported. Please make sure multiallelic sites have been removed.'
         return G if np.mean(G) < 0.5 else 1-G
