@@ -1,4 +1,4 @@
-name: Upload to TestPyPI
+name: Upload to PyPI
 
 # Controls when the action will run. 
 on:
@@ -26,12 +26,12 @@ jobs:
           # Install the package from setup.py
           python3 setup.py install
 
-      # Upload to TestPyPI
-      - name: Build and Upload to TestPyPI
+      # Upload to PyPI
+      - name: Build and Upload to PyPI
         run: |
           python3 setup.py sdist bdist_wheel
           python3 -m twine upload dist/*
         env:
           TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.TESTPYPI_API_TOKEN }}
-          TWINE_REPOSITORY: testpypi
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+          TWINE_REPOSITORY: pypi
