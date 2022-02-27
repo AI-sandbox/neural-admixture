@@ -68,7 +68,7 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
                                 supervised_loss_weight=supervised_loss_weight)
     model.to(device)
     if log_to_wandb:
-        wandb.watch(model, log='all', log_freq=1)
+        wandb.watch(model, log='all', log_freq=1000)
     
     # Optimizer
     optimizer = switchers['optimizers'][optimizer_str](filter(lambda p: p.requires_grad, model.parameters()), learning_rate)

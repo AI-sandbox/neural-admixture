@@ -6,10 +6,10 @@
 
 # Neural ADMIXTURE
 
-![nadm_mna](https://user-images.githubusercontent.com/31998088/147361139-a964ead1-993a-4654-84ee-d3efb850dedc.png)
+![nadm_mna](https://user-images.githubusercontent.com/31998088/154133905-59ee5fae-243d-4df3-ae18-81563c51c0c8.png)
 
 
-Neural ADMIXTURE is an unsupervised global ancestry inference technique based on ADMIXTURE. By using neural networks, Neural ADMIXTURE offers high quality ancestry assignments with a running time which is much faster than ADMIXTURE's. For more information, we recommend reading [the corresponding article](https://www.biorxiv.org/content/10.1101/2021.06.27.450081v3).
+Neural ADMIXTURE is an unsupervised global ancestry inference technique based on ADMIXTURE. By using neural networks, Neural ADMIXTURE offers high quality ancestry assignments with a running time which is much faster than ADMIXTURE's. For more information, we recommend reading [the corresponding article](https://www.biorxiv.org/content/10.1101/2021.06.27.450081).
 
 The software can be invoked via CLI and has a similar interface to ADMIXTURE (_e.g._ the output format is completely interchangeable). While the software runs in both CPU and GPU, we recommend using GPUs if available to take advantage of the neural network-based implementation.
 
@@ -86,6 +86,8 @@ As described in the article, Neural ADMIXTURE's decoder(s) can be initialized us
 - `pckmeans`: initialize using PCK-Means (Algorithm 1 in the paper). Performs best if data contains a large number of single-ancestry individuals.
 - `pcarchetypal`: initialize using PCArchetypal (Algorithm 2 in the paper). Performs best if data contains a large number of admixed individuals.
 
+The `supervised` initialization method is used by default (and can only be used) when using supervised mode.
+
 ### Inference mode (projective analysis)
 
 ADMIXTURE allows reusing computations in the _projective analysis_ mode, in which the `P` (`F`, frequencies) matrix is fixed to an already known result and only the assignments are computed. Due to the nature of our algorithm, assignments can be computed for unseen data by simply feeding the data through the encoder. This mode can be run by typing `infer` instead of `train` right after the `neural-admixture` call.
@@ -106,6 +108,16 @@ As also mentioned in the paper, Neural ADMIXTURE can be used to learn a function
 - `--freeze_decoder`: indicates that the decoder weights will be frozen during training.
 
 If the second argument is skipped, then the decoder weights will be updated and the solution won't yield exactly the same `P`/`F` matrix that was used as input.
+
+### Supervised Neural ADMIXTURE
+
+The supervised version of the algorithm can be used when all samples have a corresponding population label. This can be very benificial, especially when dealing with large imbalances in the data (_e.g_ data 1K samples from Pop1 and 50 samples from Pop2).
+
+The supervised mode works by adding a scaled classification loss to the bottleneck of the algorithm (Equation 5 of the paper). The scaling factor can have a big impact on the performance. If it is too small, then the supervised loss will have little impact on the training, so results would be similar to an unsupervised run. On the other hand, if it is too large, then the supervision will dominate training, making the network overconfident in its predictions: essentially, one would get only binary assignments. The default value of the scaling factor is _η=0.05_, and can be controlled using the parameter `--supervised_loss_weight`.
+
+Basically, if on validation data you are getting single-ancestry estimations when you expect admixed estimations, try setting a smaller value for the supervised loss scaling factor _η_ (`--supervised_loss_weight`) and/or a larger value for the L2 penalty term _λ_ (`--l2_penalty`, defaults to 0.0005); and vice versa.
+
+Moreover, note that the initialization method chosen will have no effect, as the supervised method is always used when using the supervised version.
 
 ## Other options
 
