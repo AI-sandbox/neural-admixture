@@ -110,12 +110,16 @@ class SupervisedInitialization(object):
             raise NotImplementedError
         t0 = time.time()
         k = K[0]
-        ancestry_dict = {anc: idx for idx, anc in enumerate(sorted(np.unique(y)))}
+        ancestry_dict = {anc: idx for idx, anc in enumerate(sorted(np.unique([a for a in y if a != '-'])))}
         assert len(ancestry_dict) == k, f'Number of ancestries in training ground truth ({len(ancestry_dict)}) is not equal to the value of K ({k})'
+        ancestry_dict['-'] = -1
         to_idx_mapper = np.vectorize(lambda x: ancestry_dict[x])
+        # Do not take into account samples with missing labels
         y_num = to_idx_mapper(y[:])
-        X_mem = X[:,:]
-        P_init = torch.as_tensor(np.vstack([X_mem[y_num==idx,:].mean(axis=0) for idx in range(k)]), dtype=torch.float32)
+        mask = y_num > -1
+        masked_y_num = y_num[mask]
+        X_masked = X[mask,:]
+        P_init = torch.as_tensor(np.vstack([X_masked[masked_y_num==idx,:].mean(axis=0) for idx in range(k)]), dtype=torch.float32)
         te = time.time()
         log.info('Weights initialized in {} seconds.'.format(te-t0))
         return P_init

@@ -92,10 +92,10 @@ def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
     val_snps = snp_reader.read_data(val_file) if val_file else None
     if tr_pops_f:
         with open(tr_pops_f, 'r') as fb:
-            tr_pops = fb.readlines()
+            tr_pops = [p.strip() for p in fb.readlines()]
     if val_pops_f:
         with open(val_pops_f, 'r') as fb:
-            val_pops = fb.readlines()
+            val_pops = [p.strip() for p in fb.readlines()]
     validate_data(tr_snps, tr_pops, val_snps, val_pops)
     log.info(f'Data contains {tr_snps.shape[0]} samples and {tr_snps.shape[1]} SNPs.')
     if val_snps is not None:

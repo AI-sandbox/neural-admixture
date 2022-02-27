@@ -61,8 +61,9 @@ class NeuralAdmixture(nn.Module):
         if self.supervised:
             log.info('Going to train on supervised mode.')
             assert trY is not None, 'Training ground truth ancestries needed for supervised mode'
-            ancestry_dict = {anc: idx for idx, anc in enumerate(sorted(np.unique(trY)))}
+            ancestry_dict = {anc: idx for idx, anc in enumerate(sorted(np.unique([a for a in trY if a  != '-'])))}
             assert len(ancestry_dict) == self.ks[0], 'Number of ancestries in training ground truth is not equal to the value of k'
+            ancestry_dict['-'] = -1
             to_idx_mapper = np.vectorize(lambda x: ancestry_dict[x])
             trY_num = to_idx_mapper(trY[:])
             valY_num = to_idx_mapper(valY[:]) if valY is not None else None
@@ -99,7 +100,8 @@ class NeuralAdmixture(nn.Module):
         recs, hid_states = self(X)
         loss = sum((loss_f(rec, X) for rec in recs))
         if loss_f_supervised is not None:  # Currently only implemented for single-head architecture!
-            loss += sum((self.supervised_loss_weight*loss_f_supervised(h, y) for h in hid_states))
+            mask = y > -1
+            loss += sum((self.supervised_loss_weight*loss_f_supervised(h[mask], y[mask]) for h in hid_states))
         if self.lambda_l2 > 0:
             loss += self.lambda_l2*self._get_encoder_norm(2)**2
         del recs, hid_states
@@ -117,7 +119,8 @@ class NeuralAdmixture(nn.Module):
                 recs, hid_states = self(X)
                 acum_val_loss += sum((loss_f(rec, X).item() for rec in recs))
                 if loss_f_supervised is not None and y_b is not None:
-                    acum_val_loss += sum((self.supervised_loss_weight*loss_f_supervised(h, y_b).item() for h in hid_states))
+                    mask = y_b > -1
+                    acum_val_loss += sum((self.supervised_loss_weight*loss_f_supervised(h[mask], y_b[mask]).item() for h in hid_states))
             if self.lambda_l2 > 1e-6:
                 acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2
         return acum_val_loss
