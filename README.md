@@ -49,7 +49,7 @@ For unsupervised Neural ADMIXTURE (multi-head):
 For supervised Neural ADMIXTURE:
 
 ```console
-> neural-admixture train --k K --supervised --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH # only single-head support at the moment
+> neural-admixture train --k K --supervised --populations_path POPS_PATH --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH # only single-head support at the moment
 ```
 
 As an example, the following ADMIXTURE call
@@ -111,7 +111,9 @@ If the second argument is skipped, then the decoder weights will be updated and 
 
 ### Supervised Neural ADMIXTURE
 
-The supervised version of the algorithm can be used when all samples have a corresponding population label. This can be very benificial, especially when dealing with large imbalances in the data (_e.g_ data 1K samples from Pop1 and 50 samples from Pop2).
+The supervised version of the algorithm can be used when all samples have a corresponding population label. This can be very benificial, especially when dealing with large imbalances in the data (_e.g_ data contains 1K samples from Pop1 and 50 samples from Pop2).
+
+In order to use the supervised mode, the flag `--supervised` must be passed when invoking the software, along with a `--populations_path` pointing to the file where the ancestries are defined. The latter file must be a single-column, headerless, plain text file where row `i` denotes the ancestry for the `i`-th sample in the data. The character `-` must be used for samples whose ancestry is missing/unknown. If validation data is provided, then the corresponding populations file path must be passed through the `--validation_population_path` argument.
 
 The supervised mode works by adding a scaled classification loss to the bottleneck of the algorithm (Equation 5 of the paper). The scaling factor can have a big impact on the performance. If it is too small, then the supervised loss will have little impact on the training, so results would be similar to an unsupervised run. On the other hand, if it is too large, then the supervision will dominate training, making the network overconfident in its predictions: essentially, one would get only binary assignments. The default value of the scaling factor is _η=0.05_, and can be controlled using the parameter `--supervised_loss_weight`.
 
@@ -126,8 +128,8 @@ Moreover, note that the initialization method chosen will have no effect, as the
 - `pca_components`: dimension of the PCA projection for the PC-KMeans initialization. Defaults to 8.
 - `max_epochs`: maximum number of times the whole training dataset is used to update the weights. Defaults to 50. 
 - `tol`: will stop optimization when difference in objective function between two iterations is smaller than this value. Defaults to 1e-6.
-- `learning_rate`: dictates how big an update to the weights will be. If you find the loss function oscillating, try setting a lower value. If convergence is slow, try setting a higher value. Defaults to 0.0001.
-- `seed`: seed for replication purposes, similar to ADMIXTURE's. Defaults to 42.
+- `learning_rate`: dictates how large an update to the weights will be. If you find the loss function oscillating, try setting a lower value. If convergence is slow, try setting a higher value. Defaults to 0.0001.
+- `seed`: RNG seed for replication purposes. Defaults to 42.
 
 ## Using Plink2 binary files (.pgen)
 
@@ -147,14 +149,15 @@ When using this software, please cite the following paper (currently pre-print):
 
 ```{tex}
 @article {Mantes2021.06.27.450081,
-	author = {Mantes, Albert Dominguez and Montserrat, Daniel Mas and Bustamante, Carlos and Giró-i-Nieto, Xavier and Ioannidis, Alexander G},
+	author = {Mantes, Albert Dominguez and Montserrat, Daniel Mas and Bustamante, Carlos D. and Gir{\'o}-i-Nieto, Xavier and Ioannidis, Alexander G.},
 	title = {Neural ADMIXTURE: rapid population clustering with autoencoders},
 	elocation-id = {2021.06.27.450081},
-	year = {2021},
+	year = {2022},
 	doi = {10.1101/2021.06.27.450081},
 	publisher = {Cold Spring Harbor Laboratory},
-	abstract = {Characterizing the genetic substructure of large cohorts has become increasingly important as genetic association and prediction studies are extended to massive, increasingly diverse, biobanks. ADMIXTURE and STRUCTURE are widely used unsupervised clustering algorithms for characterizing such ancestral genetic structure. These methods decompose individual genomes into fractional cluster assignments with each cluster representing a vector of DNA marker frequencies. The assignments, and clusters, provide an interpretable representation for geneticists to describe population substructure at the sample level. However, with the rapidly increasing size of population biobanks and the growing numbers of variants genotyped (or sequenced) per sample, such traditional methods become computationally intractable. Furthermore, multiple runs with different hyperparameters are required to properly depict the population clustering using these traditional methods, increasing the computational burden. This can lead to days of compute. In this work we present Neural ADMIXTURE, a neural network autoencoder that follows the same modeling assumptions as ADMIXTURE, providing similar (or better) clustering, while reducing the compute time by orders of magnitude. In addition, this network can include multiple outputs, providing the equivalent results as running the original ADMIXTURE algorithm many times with different numbers of clusters. These models can also be stored, allowing later cluster assignment to be performed with a linear computational time.Competing Interest StatementThe authors have declared no competing interest.},
-	URL = {https://www.biorxiv.org/content/early/2021/06/28/2021.06.27.450081},
-	eprint = {https://www.biorxiv.org/content/early/2021/06/28/2021.06.27.450081.full.pdf},
+	abstract = {Characterizing the genetic substructure of large cohorts has become increasingly important as genetic association and prediction studies are extended to massive, increasingly diverse, biobanks. ADMIXTURE and STRUCTURE are widely used unsupervised clustering algorithms for characterizing such ancestral genetic structure. These methods decompose individual genomes into fractional cluster assignments with each cluster representing a vector of DNA marker frequencies. The assignments, and clusters, provide an interpretable representation for geneticists to describe population substructure at the sample level. However, with the rapidly increasing size of population biobanks and the growing numbers of variants genotyped (or sequenced) per sample, such traditional methods become computationally intractable. Furthermore, multiple runs with different hyperparameters are required to properly depict the population clustering using these traditional methods, increasing the computational burden. This can lead to days of compute. In this work we present Neural ADMIXTURE, a neural network autoencoder that follows the same modeling assumptions as ADMIXTURE, providing similar (or better) clustering, while reducing the compute time by orders of magnitude. Indeed, the equivalent of one month of continuous compute can be reduced to hours. In addition, Neural ADMIXTURE can include multiple outputs, providing the equivalent results as running the original ADMIXTURE algorithm many times with different numbers of clusters. Our models can also be stored, allowing later cluster assignment to be performed with a linear computational time. The software implementation of Neural ADMIXTURE can be found at https://github.com/ai-sandbox/neural-admixture.Competing Interest StatementThe authors have declared no competing interest.},
+	URL = {https://www.biorxiv.org/content/early/2022/01/14/2021.06.27.450081},
+	eprint = {https://www.biorxiv.org/content/early/2022/01/14/2021.06.27.450081.full.pdf},
 	journal = {bioRxiv}
 }
+```
