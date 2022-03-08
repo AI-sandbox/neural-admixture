@@ -107,10 +107,8 @@ def validate_data(tr_snps, tr_pops, val_snps, val_pops):
     assert not (val_snps is None and val_pops is not None), 'Populations were specified for validation data, but no SNPs were specified.'
     if tr_pops is not None:
         assert len(tr_snps) == len(tr_pops), f'Number of samples in data and population file does not match: {len(tr_snps)} vs {len(tr_pops)}.'
-    if val_snps is not None:
-        assert tr_snps.shape[1] == val_snps.shape[1], f'Number of SNPs in training and validation data does not match: {tr_snps.shape[1]} vs {val_snps.shape[1]}.'
-        if val_pops is not None:
-            assert len(val_snps) == len(val_pops), f'Number of samples in validation data and validation population file does not match: {len(tr_snps)} vs {len(tr_pops)}.'
+    if val_pops is not None:
+        assert len(val_snps) == len(val_pops), f'Number of samples in validation data and validation population file does not match: {len(tr_snps)} vs {len(tr_pops)}.'
     return
 
 def get_model_predictions(model, data, bsize, device):

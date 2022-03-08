@@ -6,6 +6,7 @@ import sys
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
 
+# TODO: make read functions return variant IDs too
 class SNPReader:
     def _read_vcf(self, file):
         log.info('Input format is VCF.')
