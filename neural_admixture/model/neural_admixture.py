@@ -182,12 +182,17 @@ class NeuralAdmixture(nn.Module):
                     print('\t{:0.3f}'.format(fst), end='' if l != j-1 else '\n')
         return
     
-    def save_config(self, name, save_dir):
+    def save_config(self, name, save_dir, snps_info):
         config = {
             'Ks': self.ks,
             'num_snps': self.num_features,
+            'snps_info': snps_info
         }
         with open(f'{save_dir}/{name}_config.json', 'w') as fb:
             json.dump(config, fb)
         log.info('Configuration file saved.')
         return
+
+    def load_config(self, load_dir):
+        with open(load_dir, 'r') as fb:
+            return json.load(fb)

@@ -4,6 +4,7 @@ import sys
 import torch
 from model.neural_admixture import NeuralAdmixture
 from src import utils
+from src.snp_reader import SNPReader
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -29,7 +30,8 @@ def main():
     model.load_state_dict(torch.load(weights_file_str, map_location=device), strict=True)
     model.to(device)
     log.info('Model weights loaded.')
-    X, _, _, _ = utils.read_data(data_file_str)
+    reader = SNPReader()
+    X, _ = reader.read_and_process_data(data_file_str, train_snps_config=config['snps_info'] if 'snps_info' in config.keys() else None, is_inference=True)
     assert X.shape[1] == config['num_snps'], 'Number of SNPs in data does not correspond to number of SNPs the network was trained on.'
     log.info('Data loaded and validated. Running inference...')
     _ = utils.get_model_predictions(model, X, bsize=args.batch_size, device=device)

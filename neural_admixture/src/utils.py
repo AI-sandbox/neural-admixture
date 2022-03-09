@@ -88,8 +88,8 @@ def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
     tr_pops, val_pops = None, None
     log.info('Reading data...')
     snp_reader = SNPReader()
-    tr_snps = snp_reader.read_data(tr_file)
-    val_snps = snp_reader.read_data(val_file) if val_file else None
+    tr_snps, tr_snps_config = snp_reader.read_and_process_data(tr_file)
+    val_snps, _ = snp_reader.read_and_process_data(val_file, tr_snps_config) if val_file else None
     if tr_pops_f:
         with open(tr_pops_f, 'r') as fb:
             tr_pops = [p.strip() for p in fb.readlines()]
@@ -101,7 +101,7 @@ def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
     if val_snps is not None:
         log.info(f'Validation data contains {val_snps.shape[0]} samples and {val_snps.shape[1]} SNPs.')
     log.info('Data loaded.')
-    return tr_snps, tr_pops, val_snps, val_pops
+    return tr_snps, tr_pops, val_snps, val_pops, tr_snps_config
 
 def validate_data(tr_snps, tr_pops, val_snps, val_pops):
     assert not (val_snps is None and val_pops is not None), 'Populations were specified for validation data, but no SNPs were specified.'

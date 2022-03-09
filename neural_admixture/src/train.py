@@ -12,7 +12,7 @@ from src import utils
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
 
-def fit_model(trX, args, valX=None, trY=None, valY=None):
+def fit_model(trX, args, valX=None, trY=None, valY=None, tr_snps_config={}):
     switchers = Switchers.get_switchers()
     num_max_epochs = args.max_epochs
     batch_size = args.batch_size
@@ -89,7 +89,7 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
         wandb.run.summary['total_elapsed_time'] = elapsed_time
         wandb.run.summary['avg_epoch_time'] = elapsed_time/actual_num_epochs
     torch.save(model.state_dict(), save_path)
-    model.save_config(run_name, save_dir)
+    model.save_config(run_name, save_dir, tr_snps_config)
     log.info('Optimization process finished.')
     return model, device
 
@@ -97,9 +97,8 @@ def main():
     args = utils.parse_train_args()
     tr_file, val_file = args.data_path, args.validation_data_path
     tr_pops_f, val_pops_f = args.populations_path, args.validation_populations_path
-
-    trX, trY, valX, valY = utils.read_data(tr_file, val_file, tr_pops_f, val_pops_f)
-    model, device = fit_model(trX, args, valX, trY, valY)
+    trX, trY, valX, valY, tr_snps_config = utils.read_data(tr_file, val_file, tr_pops_f, val_pops_f)
+    model, device = fit_model(trX, args, valX, trY, valY, tr_snps_config)
     log.info('Computing divergences...')
     model.display_divergences()
     log.info('Writing outputs...')
