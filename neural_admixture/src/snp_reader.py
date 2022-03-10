@@ -109,14 +109,13 @@ class SNPReader:
             means = [x['mean'] for x in sorted(list(train_config.values()), key=lambda x: x['idx'])]
             idxs = [(idx, train_config[id]['idx']) for idx, id in enumerate(ids) if id in train_config.keys()]
             mask_in_G, mask_out_G = list(zip(*idxs))
-            num_missing = len(training_config)-len(mask_G)     
-            if num_missing/len(training_config) > .5:
+            num_missing = len(train_config)-len(mask_in_G)     
+            if num_missing/len(train_config) > .5:
                 log.error('More than 50% of the SNPs contained in the training data could not be found. Exiting...')
                 sys.exit(1)
-            na_mask = G[:, mask_G] < 0
             means_matrix = np.broadcast_to(means, (G.shape[0], len(train_config)))
             out_G = np.empty(means_matrix.shape)
-            out_G[:, mask_out_G] = np.select([na_mask, np.invert(na_mask)], [means_matrix[:, mask_out_G], G[:, mask_G]])
+            out_G[:, mask_out_G] = np.where(G[:, mask_in_G]<0, means_matrix[:, mask_out_G], G[:, mask_in_G])
             if num_missing > 0:
                 log.warn(f'{num_missing} variants ({round(100*num_missing/out_G.shape[1], 2)}%) used during training are missing from the data. Mean values will be used instead for these SNPs.')
             else:
