@@ -36,7 +36,7 @@ def main():
     log.info('Inference run successfully. Writing outputs...')
     utils.write_outputs(model, X, valX=None, bsize=args.batch_size,
                         device=device, run_name=out_name,
-                        out_path=args.save_dir, only_Q=True)
+                        out_path=args.out_dir, only_Q=True)
     log.info('Exiting...')
     logging.shutdown()
     return 0
