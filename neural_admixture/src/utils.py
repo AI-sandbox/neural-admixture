@@ -58,7 +58,7 @@ def parse_infer_args():
     parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data')
     parser.add_argument('--name', required=True, type=str, help='Trained experiment/model name')
     parser.add_argument('--batch_size', required=False, default=400, type=int, help='Batch size')
-    parser.add_argumnet('--out_dir', required=False, type=str, help='Path to save the output. If not given sets to --save_dir.')
+    parser.add_argument('--out_dir', required=False, type=str, help='Path to save the output. If not given sets to --save_dir.')
     args = parser.parse_args()
     if args.out_dir is None:
         args.out_dir = args.save_dir
