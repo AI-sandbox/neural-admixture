@@ -8,8 +8,8 @@ from src import utils
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
 
-def main():
-    args = utils.parse_infer_args()
+def main(argv):
+    args = utils.parse_infer_args(argv)
     log.info('Will use GPU' if torch.cuda.is_available() else 'No GPUs available.')
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     data_file_str = args.data_path
@@ -40,6 +40,3 @@ def main():
     log.info('Exiting...')
     logging.shutdown()
     return 0
-
-if __name__ == '__main__':
-    sys.exit(main())

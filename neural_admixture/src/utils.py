@@ -1,22 +1,19 @@
 import argparse
-import gc
 import logging
 import numpy as np
 import os
 import sys
-import time
 import torch
 import wandb
-from itertools import permutations
 
 from src.snp_reader import SNPReader
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
 
-def parse_train_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('mode', choices=['train', 'infer'], help='Choose between modes.')
+def parse_train_args(argv):
+    parser = argparse.ArgumentParser(prog='neural-admixture train',
+                                     description='Rapid population clustering with autoencoders - training mode')
     parser.add_argument('--learning_rate', required=False, default=0.0001, type=float, help='Learning rate')
     parser.add_argument('--max_epochs', required=False, type=int, default=50, help='Maximum number of epochs')
     parser.add_argument('--initialization', required=False, type=str, default = 'pckmeans',
@@ -48,17 +45,17 @@ def parse_train_args():
     parser.add_argument('--name', required=True, type=str, help='Experiment/model name')
     parser.add_argument('--batch_size', required=False, default=400, type=int, help='Batch size')
     parser.add_argument('--supervised_loss_weight', required=False, default=0.05, type=float, help='Weight given to the supervised loss')
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
-def parse_infer_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('mode', choices=['train', 'infer'], help='Choose between modes')
+def parse_infer_args(argv):
+    parser = argparse.ArgumentParser(prog='neural-admixture infer',
+                                     description='Rapid population clustering with autoencoders - inference mode')
     parser.add_argument('--out_name', required=True, type=str, help='Name used to output files on inference mode')
     parser.add_argument('--save_dir', required=True, type=str, help='Load model from this directory')
     parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data')
     parser.add_argument('--name', required=True, type=str, help='Trained experiment/model name')
     parser.add_argument('--batch_size', required=False, default=400, type=int, help='Batch size')
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 def initialize_wandb(run_name, trX, valX, args, out_path, silent=True):
     if run_name is None:

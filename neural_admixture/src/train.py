@@ -93,8 +93,8 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
     log.info('Optimization process finished.')
     return model, device
 
-def main():
-    args = utils.parse_train_args()
+def main(argv):
+    args = utils.parse_train_args(argv)
     tr_file, val_file = args.data_path, args.validation_data_path
     tr_pops_f, val_pops_f = args.populations_path, args.validation_populations_path
 
@@ -108,5 +108,3 @@ def main():
     logging.shutdown()
     return 0
 
-if __name__ == '__main__':
-    sys.exit(main())

@@ -20,14 +20,14 @@ The successful usage of this package requires a computer with enough RAM to be a
 
 ### Software requirements
 
-The package has been tested on both Linux (CentOS 7.9.2009, Ubuntu 18.04.5 LTS) and MacOS (BigSur 11.2.3, Intel). If using GPUs, make sure CUDA drivers are properly installed.
+The package has been tested on both Linux (CentOS 7.9.2009, Ubuntu 18.04.5 LTS) and MacOS (BigSur 11.2.3, Intel and Monterey 12.3.1, M1). If using GPUs, make sure CUDA drivers are properly installed.
 
 We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `conda`), and then install the package `neural-admixture` there. As an example, for `virtualenv`, one should launch the following commands:
 
 ```console
 > virtualenv --python=python3.9 ~/venv/nadmenv
 > source ~/venv/nadmenv/bin/activate
-(nadmenv) > pip3 install neural-admixture
+(nadmenv) > pip install neural-admixture
 ```
 
 ## Installation Guide
@@ -35,7 +35,7 @@ We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `con
 The package can be easily installed in at most a few minutes using `pip` (make sure to add the `--upgrade` flag if updating the version):
 
 ```console
-(nadmenv) > pip3 install neural-admixture
+(nadmenv) > pip install neural-admixture
 ```
 
 ## Usage 
@@ -113,7 +113,7 @@ For this command to work, files `./outputs/nadm_test.pt` and `./outputs/nadm_tes
 
 As also mentioned in the paper, Neural ADMIXTURE can be used to learn a function (through the encoder) given the results of the frequency matrix `P`/`F` of another algorithm so out-of-training data inference can be performed using the structure learnt by the other algorithm. The following arguments should be used to run Neural ADMIXTURE in this mode:
 
-- `--initialization pretrained`: indicates than an ADMIXTURE-like `.P` file must be loaded to initialize the decoder weights. The path of the file is specified using the `--init_file` argument.
+- `--initialization pretrained`: indicates that an ADMIXTURE-like `.P` file must be loaded to initialize the decoder weights. The path of the file is specified using the `--init_file` argument.
 - `--freeze_decoder`: indicates that the decoder weights will be frozen during training.
 
 If the second argument is skipped, then the decoder weights will be updated and the solution won't yield exactly the same `P`/`F` matrix that was used as input.
