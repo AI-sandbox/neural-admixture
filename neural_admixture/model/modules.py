@@ -62,24 +62,3 @@ class NeuralDecoder(nn.Module):
         outputs = [torch.clamp(self._get_decoder_for_k(self.ks[i])(hid_states[i]), 0, 1) for i in range(len(self.ks))]
         return outputs
 
-# class NonLinearMultiHeadDecoder(nn.Module):
-#     def __init__(self, ks, output_size, bias=False,
-#                  hidden_size=512, hidden_activation=nn.ReLU(),
-#                  inits=None):
-#         super().__init__()
-#         self.ks = ks
-#         self.hidden_size = hidden_size
-#         self.output_size = output_size
-#         self.heads_decoder = nn.Linear(sum(self.ks), self.hidden_size, bias=bias)
-#         self.common_decoder = nn.Linear(self.hidden_size, self.output_size)
-#         self.nonlinearity = hidden_activation
-#         self.sigmoid = nn.Sigmoid()
-
-#     def forward(self, hid_states):
-#         if len(hid_states) > 1:
-#             concat_states = torch.cat(hid_states, 1)
-#         else:
-#             concat_states = hid_states[0]
-#         dec = self.nonlinearity(self.heads_decoder(concat_states))
-#         rec = self.sigmoid(self.common_decoder(dec))
-#         return rec

@@ -53,7 +53,7 @@ class PCKMeansInitialization(object):
             centers = np.concatenate([obj.cluster_centers_ for obj in k_means_objs])
             P_init = torch.as_tensor(pca_obj.inverse_transform(centers), dtype=torch.float32).view(sum(K), -1)
         else:
-            k_means_obj = KMeans(n_clusters=K, random_state=42, n_init=10, max_iter=10).fit(X_tsvd)
+            k_means_obj = KMeans(n_clusters=K, random_state=42, n_init=10, max_iter=10).fit(X_pca)
             P_init = torch.as_tensor(pca_obj.inverse_transform(k_means_obj.cluster_centers_), dtype=torch.float32).view(K, -1)
         te = time.time()
         log.info('Weights initialized in {} seconds.'.format(te-t0))
@@ -70,7 +70,7 @@ class PCKMeansInitialization(object):
 class PCArchetypal(object):
     @classmethod
     def get_decoder_init(cls, X, K, path, run_name, n_components, seed):
-        log.info('Running ArchetypalPCA initialization...')
+        log.info('Running PCArchetypal initialization...')
         np.random.seed(seed)
         t0 = time.time()
         try:
@@ -122,4 +122,17 @@ class SupervisedInitialization(object):
         P_init = torch.as_tensor(np.vstack([X_masked[masked_y_num==idx,:].mean(axis=0) for idx in range(k)]), dtype=torch.float32)
         te = time.time()
         log.info('Weights initialized in {} seconds.'.format(te-t0))
+        return P_init
+
+
+class PretrainedInitialization(object):
+    @classmethod
+    def get_decoder_init(cls, X, K, path):
+        log.info('Fetching pretrained weights...')
+        if len(K) > 1:
+            raise NotImplementedError("Pretrained mode is only supported for single-head runs.")
+        # Loads standard ADMIXTURE output format
+        P_init = torch.as_tensor(1-np.genfromtxt(path, delimiter=' ').T, dtype=torch.float32)
+        assert P_init.shape[0] == K[0], 'Input P is not coherent with the value of K'
+        log.info('Weights fetched.')
         return P_init

@@ -15,7 +15,6 @@ class Switchers(object):
         'pcarchetypal': lambda X, y, k, seed, path, run_name, n_comp: init.PCArchetypal.get_decoder_init(X, k, path, run_name, n_comp, seed),
         'pretrained': lambda X, y, k, seed, path, run_name, n_comp: init.PretrainedInitialization.get_decoder_init(X, k, path),
         'supervised': lambda X, y, k, seed, path, run_name, n_comp: init.SupervisedInitialization.get_decoder_init(X, y, k)
-
     }
 
     _optimizers = {

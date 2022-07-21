@@ -52,10 +52,10 @@ def fit_model(trX, args, valX=None, trY=None, valY=None):
     torch.manual_seed(seed)
     # Initialization
     log.info('Initializing...')
-    if init_file is None:
+    if init_file is None and decoder_init != "pretrained":
         log.warning(f'Initialization filename not provided. Going to store it to {save_dir}/{run_name}.pkl')
         init_file = f'{run_name}.pkl'
-    init_path = f'{save_dir}/{init_file}'
+    init_path = f'{save_dir}/{init_file}' if decoder_init != "pretrained" else init_file
     P_init = switchers['initializations'][decoder_init](trX, trY, Ks, seed, init_path, run_name, n_components)
     activation = switchers['activations'][activation_str](0)
     log.info('Variants: {}'.format(trX.shape[1]))

@@ -16,7 +16,7 @@ def parse_train_args(argv):
                                      description='Rapid population clustering with autoencoders - training mode')
     parser.add_argument('--learning_rate', required=False, default=0.0001, type=float, help='Learning rate')
     parser.add_argument('--max_epochs', required=False, type=int, default=50, help='Maximum number of epochs')
-    parser.add_argument('--initialization', required=False, type=str, default = 'pckmeans',
+    parser.add_argument('--initialization', required=False, type=str, default = 'pcarchetypal',
                         choices=['pretrained', 'pckmeans', 'supervised', 'pcarchetypal'],
                         help='Decoder initialization (overriden if supervised)')
     parser.add_argument('--optimizer', required=False, default='adam', type=str, choices=['adam', 'sgd'], help='Optimizer')
