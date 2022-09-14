@@ -1,3 +1,4 @@
+import dask.array as da
 import json
 import logging
 import math
@@ -7,6 +8,9 @@ import sys
 import torch
 import torch.nn as nn
 import wandb
+from pathlib import Path
+from tqdm.auto import tqdm
+
 from .modules import NeuralDecoder, NeuralEncoder, ZeroOneClipper
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
@@ -68,8 +72,10 @@ class NeuralAdmixture(nn.Module):
             trY_num = to_idx_mapper(trY[:])
             valY_num = to_idx_mapper(valY[:]) if valY is not None else None
             loss_f_supervised = nn.CrossEntropyLoss(reduction='mean')
+        log.info("Bringing training data into memory...")
+        trX = trX.compute()
         for ep in range(num_epochs):
-            tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, shuffle, loss_f_supervised, trY_num, valY_num)
+            tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, shuffle, loss_f_supervised, trY_num, valY_num, epoch_num=ep+1)
             tr_losses.append(tr_loss)
             val_losses.append(val_loss)
             assert not math.isnan(tr_loss), 'Training loss is NaN'
@@ -112,8 +118,8 @@ class NeuralAdmixture(nn.Module):
     
     def _validate(self, valX, loss_f, batch_size, device, loss_f_supervised=None, y=None):
         acum_val_loss = 0
-        with torch.no_grad():
-            for X, y_b in self._batch_generator(valX, batch_size, y=y if loss_f_supervised is not None else None):
+        with torch.inference_mode():
+            for X, y_b in self.batch_generator(valX, batch_size, y=y if loss_f_supervised is not None else None):
                 X = X.to(device)
                 y_b = y_b.to(device) if y_b is not None else None
                 recs, hid_states = self(X)
@@ -125,22 +131,25 @@ class NeuralAdmixture(nn.Module):
                 acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2
         return acum_val_loss
 
-    def _batch_generator(self, X, batch_size=0, shuffle=True, y=None):
+    def batch_generator(self, X, batch_size=0, shuffle=True, y=None):
+        is_inmem = not isinstance(X, da.core.Array)
         idxs = [i for i in range(X.shape[0])]
         if shuffle:
             random.shuffle(idxs)
         if batch_size < 1:
-            yield torch.as_tensor(X, dtype=torch.float32), torch.as_tensor(y, dtype=torch.int64) if y is not None else None
+            yield torch.as_tensor(X.compute() if not is_inmem else X, dtype=torch.float32), torch.as_tensor(y, dtype=torch.int64) if y is not None else None
         else:
             for i in range(0, X.shape[0], batch_size):
-                yield torch.as_tensor(X[sorted(idxs[i:i+batch_size])], dtype=torch.float32), torch.as_tensor(y[sorted(idxs[i:i+batch_size])], dtype=torch.int64) if y is not None else None
+                to_yield = X[sorted(idxs[i:i+batch_size])]
+                yield torch.as_tensor(to_yield.compute() if not is_inmem else to_yield, dtype=torch.float32), torch.as_tensor(y[sorted(idxs[i:i+batch_size])], dtype=torch.int64) if y is not None else None
 
     def _run_epoch(self, trX, optimizer, loss_f, batch_size, valX,
                    device, shuffle=True, loss_f_supervised=None,
-                   trY=None, valY=None):
+                   trY=None, valY=None, epoch_num=0):
         tr_loss, val_loss = 0, None
         self.train()
-        for X, y in self._batch_generator(trX, batch_size, shuffle=shuffle, y=trY if loss_f_supervised is not None else None):
+        total_b = trX.shape[0]//batch_size+1
+        for X, y in tqdm(self.batch_generator(trX, batch_size, shuffle=shuffle, y=trY if loss_f_supervised is not None else None), desc=f"Epoch {epoch_num}", total=total_b):
             step_loss = self._run_step(X.to(device), optimizer, loss_f, loss_f_supervised, y.to(device) if y is not None else None)
             tr_loss += step_loss
         if valX is not None:
@@ -160,7 +169,7 @@ class NeuralAdmixture(nn.Module):
         '''
         try:
             num = np.mean(((pop1-pop2)**2))
-            den = np.mean(np.multiply(pop1, 1-pop2)+np.multiply(pop2, 1-pop1))
+            den = np.mean(np.multiply(pop1, 1-pop2)+np.multiply(pop2, 1-pop1))+1e-7
             return num/den
         except Exception as e:
             log.error(e)
@@ -179,7 +188,7 @@ class NeuralAdmixture(nn.Module):
                 for l in range(j):
                     pop1 = dec[:,l]
                     fst = self._hudsons_fst(pop1, pop2)
-                    print('\t{:0.3f}'.format(fst), end='' if l != j-1 else '\n')
+                    print(f"\t{fst:0.3f}", end="" if l != j-1 else '\n')
         return
     
     def save_config(self, name, save_dir):
@@ -187,7 +196,7 @@ class NeuralAdmixture(nn.Module):
             'Ks': self.ks,
             'num_snps': self.num_features,
         }
-        with open(f'{save_dir}/{name}_config.json', 'w') as fb:
+        with open(Path(save_dir)/f"{name}_config.json", 'w') as fb:
             json.dump(config, fb)
         log.info('Configuration file saved.')
         return

@@ -1,9 +1,11 @@
-import sys
-import model.initializations as init
 import torch.nn as nn
 import torch.optim as optim
 
+from . import initializations as init
+
 class Switchers(object):
+    """Switcher object for several utilities
+    """
     _activations = {
         'relu': lambda x: nn.ReLU(),
         'tanh': lambda x: nn.Tanh(),
@@ -11,10 +13,10 @@ class Switchers(object):
     }
 
     _initializations = {
-        'pckmeans': lambda X, y, k, seed, path, run_name, n_comp: init.PCKMeansInitialization.get_decoder_init(X, k, path, run_name, n_comp),
-        'pcarchetypal': lambda X, y, k, seed, path, run_name, n_comp: init.PCArchetypal.get_decoder_init(X, k, path, run_name, n_comp, seed),
-        'pretrained': lambda X, y, k, seed, path, run_name, n_comp: init.PretrainedInitialization.get_decoder_init(X, k, path),
-        'supervised': lambda X, y, k, seed, path, run_name, n_comp: init.SupervisedInitialization.get_decoder_init(X, y, k)
+        'pckmeans': lambda X, y, k, seed, path, run_name, n_comp, batch_size: init.PCKMeansInitialization.get_decoder_init(X, k, path, run_name, n_comp, seed, batch_size),
+        'pcarchetypal': lambda X, y, k, seed, path, run_name, n_comp, batch_size: init.PCArchetypal.get_decoder_init(X, k, path, run_name, n_comp, seed, batch_size),
+        'pretrained': lambda X, y, k, seed, path, run_name, n_comp, batch_size: init.PretrainedInitialization.get_decoder_init(X, k, path),
+        'supervised': lambda X, y, k, seed, path, run_name, n_comp, batch_size: init.SupervisedInitialization.get_decoder_init(X, y, k)
     }
 
     _optimizers = {

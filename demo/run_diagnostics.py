@@ -23,9 +23,9 @@ def run_checks():
     except Exception as e:
         raise e
     # Check mean error is below tolerance
-    return np.abs((Q-expected_Q).mean()) < TOL and np.abs((P-expected_P).mean()) < TOL
+    return np.allclose(Q, expected_Q) and np.allclose(P, expected_P)
 
 if __name__ == '__main__':
     passed = run_checks()
-    print(f'Output and expected output are {"" if passed else "not "}similar.')
+    print(f'Output and expected output are {"" if passed else "NOT "}similar.')
     sys.exit(0)

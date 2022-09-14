@@ -1,4 +1,5 @@
 import argparse
+import configargparse
 import logging
 import numpy as np
 import os
@@ -6,14 +7,22 @@ import sys
 import torch
 import wandb
 
-from src.snp_reader import SNPReader
+import dask.array as da
+from pathlib import Path
+from typing import List, Tuple, Union
+
+from .snp_reader import SNPReader
+from ..model.neural_admixture import NeuralAdmixture
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
 
-def parse_train_args(argv):
-    parser = argparse.ArgumentParser(prog='neural-admixture train',
-                                     description='Rapid population clustering with autoencoders - training mode')
+def parse_train_args(argv: List[str]):
+    """Training arguments parser
+    """
+    parser = configargparse.ArgumentParser(prog='neural-admixture train',
+                                           description='Rapid population clustering with autoencoders - training mode',
+                                           config_file_parser_class=configargparse.YAMLConfigFileParser)
     parser.add_argument('--learning_rate', required=False, default=0.0001, type=float, help='Learning rate')
     parser.add_argument('--max_epochs', required=False, type=int, default=50, help='Maximum number of epochs')
     parser.add_argument('--initialization', required=False, type=str, default = 'pcarchetypal',
@@ -47,7 +56,9 @@ def parse_train_args(argv):
     parser.add_argument('--supervised_loss_weight', required=False, default=0.05, type=float, help='Weight given to the supervised loss')
     return parser.parse_args(argv)
 
-def parse_infer_args(argv):
+def parse_infer_args(argv: List[str]):
+    """Inference arguments parser
+    """
     parser = argparse.ArgumentParser(prog='neural-admixture infer',
                                      description='Rapid population clustering with autoencoders - inference mode')
     parser.add_argument('--out_name', required=True, type=str, help='Name used to output files on inference mode')
@@ -57,7 +68,20 @@ def parse_infer_args(argv):
     parser.add_argument('--batch_size', required=False, default=400, type=int, help='Batch size')
     return parser.parse_args(argv)
 
-def initialize_wandb(run_name, trX, valX, args, out_path, silent=True):
+def initialize_wandb(run_name: str, trX: da.core.Array, valX: da.core.Array, args: argparse.Namespace, out_path: str, silent: bool=True) -> str:
+    """Initializes wandb project run
+
+    Args:
+        run_name (str): run name.
+        trX (da.core.Array): Dask array containing training data.
+        valX (da.core.Array): Dask array containing validation data.
+        args (argparse.Namespace): parsed arguments.
+        out_path (str): results output path.
+        silent (bool, optional): if set, skips wandb log messages. Defaults to True.
+
+    Returns:
+        str: run name.
+    """
     if run_name is None:
         log.warn('Run name for wandb not specified. Skipping.')
         return None
@@ -75,8 +99,19 @@ def initialize_wandb(run_name, trX, valX, args, out_path, silent=True):
                          'out_path': out_path})
     return run_name
 
-def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
-    '''
+def read_data(tr_file: str, val_file: str=None, tr_pops_f: str=None, val_pops_f: str=None) -> Tuple[da.core.Array, Union[None, da.core.Array], Union[None, List[str]], Union[None, List[str]]]:
+    """Read data in any compatible format
+
+    Args:
+        tr_file (str): denotes the path of the main data file
+        val_file (str, optional): denotes the path of the validation data file. Defaults to None.
+        tr_pops_f (str, optional): denotes the path containing the main populations file. Defaults to None.
+        val_pops_f (str, optional): denotes the path containing the validation populations file. Defaults to None.
+
+    Returns:
+        _type_: _description_
+    """
+    ''' 
     tr_file: string denoting the path of the main data file. The format of this file must be either HDF5 or VCF.
     val_file: optional. String denoting the path of the validation data file. The format of this file must be either HDF5 or VCF.
     tr_pops_f: optional. String denoting the path containing the main populations file. It must be a plain txt file where each row is a number specifying the population of the corresponding sample, as in ADMIXTURE.
@@ -100,42 +135,76 @@ def read_data(tr_file, val_file=None, tr_pops_f=None, val_pops_f=None):
     log.info('Data loaded.')
     return tr_snps, tr_pops, val_snps, val_pops
 
-def validate_data(tr_snps, tr_pops, val_snps, val_pops):
+def validate_data(tr_snps: da.core.Array, tr_pops: Union[None, List[str]], val_snps: Union[None, da.core.Array], val_pops: Union[None, List[str]]):
+    """Data sanity check
+
+    Args:
+        tr_snps (da.core.Array): Dask array containing training data.
+        tr_pops (Union[None, List[str]]): list containing training population labels.
+        val_snps (Union[None, da.core.Array]): Dask array containing validation data.
+        val_pops (Union[None, List[str]]): list containing validation population labels.
+    """
     assert not (val_snps is None and val_pops is not None), 'Populations were specified for validation data, but no SNPs were specified.'
     if tr_pops is not None:
-        assert len(tr_snps) == len(tr_pops), f'Number of samples in data and population file does not match: {len(tr_snps)} vs {len(tr_pops)}.'
+        assert tr_snps.shape[0] == len(tr_pops), f'Number of samples in data and population file does not match: {len(tr_snps)} vs {len(tr_pops)}.'
     if val_snps is not None:
         assert tr_snps.shape[1] == val_snps.shape[1], f'Number of SNPs in training and validation data does not match: {tr_snps.shape[1]} vs {val_snps.shape[1]}.'
         if val_pops is not None:
-            assert len(val_snps) == len(val_pops), f'Number of samples in validation data and validation population file does not match: {len(tr_snps)} vs {len(tr_pops)}.'
+            assert val_snps.shape[0] == len(val_pops), f'Number of samples in validation data and validation population file does not match: {len(tr_snps)} vs {len(tr_pops)}.'
     return
 
-def get_model_predictions(model, data, bsize, device):
+def get_model_predictions(model: NeuralAdmixture, data: da.core.Array, bsize: int, device: torch.device) -> List[np.ndarray]:
+    """Helper function to run inference on data
+
+    Args:
+        model (NeuralAdmixture): trained model object.
+        data (da.core.Array): Dask array containing data to get results from.
+        bsize (int): batch size.
+        device (torch.device): torch device.
+
+    Returns:
+        _type_: _description_
+    """
     model.to(torch.device(device))
     outs = [torch.tensor([]) for _ in range(len(model.ks))]
     model.eval()
-    with torch.no_grad():
-        for i, (X, _) in enumerate(model._batch_generator(data, bsize, shuffle=False)):
+    with torch.inference_mode():
+        for X, _ in model.batch_generator(data, bsize, shuffle=False):
             X = X.to(device)
             out = model(X, True)
             for j in range(len(model.ks)):
                 outs[j] = torch.cat((outs[j], out[j].detach().cpu()), axis=0)
     return [out.cpu().numpy() for out in outs]
 
-def write_outputs(model, trX, valX, bsize, device, run_name, out_path, only_Q=False):
-    if out_path.endswith('/'):
-        out_path = out_path[:-1]
+def write_outputs(model: NeuralAdmixture, trX: da.core.Array, valX: Union[da.core.Array, None],
+                  bsize: int, device: torch.device, run_name: str, out_path: str, only_Q: bool=False) -> int:
+    """Helper function to write Q and P matrices to disk
+
+    Args:
+        model (NeuralAdmixture): trained model object.
+        trX (da.core.Array): Dask array containing training data.
+        valX (Union[da.core.Array, None]): Dask array containing validation data.
+        bsize (int): batch size.
+        device (torch.device): torch device.
+        run_name (str): run name.
+        out_path (str): output directory path.
+        only_Q (bool, optional): if set, only the Q matrix will be written. Defaults to False.
+
+    Returns:
+        int: status
+    """
+    out_path = Path(out_path)
     if not only_Q:
         for dec in model.decoders.decoders:
             w = 1-dec.weight.data.cpu().numpy()
             k = dec.in_features
-            np.savetxt(f'{out_path}/{run_name}.{k}.P', w, delimiter=' ')
+            np.savetxt(out_path/f"{run_name}.{k}.P", w, delimiter=' ')
     tr_preds = get_model_predictions(model, trX, bsize, device)
     for i, k in enumerate(model.ks):
-        np.savetxt(f'{out_path}/{run_name}.{k}.Q', tr_preds[i], delimiter=' ')
+        np.savetxt(out_path/f"{run_name}.{k}.Q", tr_preds[i], delimiter=' ')
     if valX is not None:
         val_preds = get_model_predictions(model, valX, bsize, device)
         for i, k in enumerate(model.ks):
-            np.savetxt(f'{out_path}/{run_name}_validation.{k}.Q', val_preds[i], delimiter=' ')
+            np.savetxt(out_path/f"{run_name}_validation.{k}.Q", val_preds[i], delimiter=' ')
     return 0
 
