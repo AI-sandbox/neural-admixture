@@ -2,13 +2,17 @@ import json
 import logging
 import sys
 import torch
-from model.neural_admixture import NeuralAdmixture
-from src import utils
+from typing import List
+
+from . import utils
+from ..model.neural_admixture import NeuralAdmixture
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
 
-def main(argv):
+def main(argv: List[str]):
+    """Inference entry point
+    """
     args = utils.parse_infer_args(argv)
     log.info('Will use GPU' if torch.cuda.is_available() else 'No GPUs available.')
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
