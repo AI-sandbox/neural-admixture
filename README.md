@@ -1,9 +1,10 @@
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/neural-admixture)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/neural-admixture.svg)
 ![PyPI - Version](https://img.shields.io/pypi/v/neural-admixture)
 ![PyPI - License](https://img.shields.io/pypi/l/neural-admixture)
 ![PyPI - Status](https://img.shields.io/pypi/status/neural-admixture)
 [![tests](https://github.com/AI-sandbox/neural-admixture/workflows/tests/badge.svg)](https://github.com/AI-sandbox/neural-admixture/actions)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/neural-admixture)
+[![DOI:10.1101/2021.06.27.450081](http://img.shields.io/badge/DOI-10.1101/2021.06.27.450081-B31B1B.svg)](https://doi.org/10.1101/2021.06.27.450081)
 
 # Neural ADMIXTURE
 
