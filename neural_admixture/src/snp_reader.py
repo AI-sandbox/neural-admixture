@@ -114,16 +114,16 @@ class SNPReader:
         Returns:
             da.core.Array: averaged genotype Dask array of shape (n_samples, n_snps)
         """
-        file_extension = "".join(Path(file).suffixes)
-        if file_extension == '.vcf' or file_extension == '.vcf.gz':
+        file_extensions = Path(file).suffixes
+        if '.vcf' in file_extensions:
             G = self._read_vcf(file)
-        elif file_extension == '.h5' or file_extension == '.hdf5':
+        elif '.h5' in file_extensions or '.hdf5' in file_extensions:
             G = self._read_hdf5(file)
-        elif file_extension == '.bed':
+        elif '.bed' in file_extensions:
             G = self._read_bed(file)
-        elif file_extension == '.pgen':
+        elif '.pgen' in file_extensions:
             G = self._read_pgen(file)
-        elif file_extension == '.npy':
+        elif '.npy' in file_extensions:
             G = self._read_npy(file)
         else:
             log.error('Invalid format. Unrecognized file format. Make sure file ends with .vcf | .vcf.gz | .bed | .pgen | .h5 | .hdf5 | .npy')

@@ -116,7 +116,6 @@ def main(argv: List[str]):
     tr_file, val_file = args.data_path, args.validation_data_path
     tr_pops_f, val_pops_f = args.populations_path, args.validation_populations_path
     trX, trY, valX, valY = utils.read_data(tr_file, val_file, tr_pops_f, val_pops_f)
-    print(type(trX))
     model, device = fit_model(trX, args, valX, trY, valY)
     log.info('Computing divergences...')
     model.display_divergences()
