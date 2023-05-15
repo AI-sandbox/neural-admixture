@@ -6,3 +6,4 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
+write_to = "neural_admixture/_version.py"
