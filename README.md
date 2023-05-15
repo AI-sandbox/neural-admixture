@@ -8,12 +8,11 @@
 
 # Neural ADMIXTURE
 
-![nadm_mna](https://user-images.githubusercontent.com/31998088/154133905-59ee5fae-243d-4df3-ae18-81563c51c0c8.png)
-
-
 Neural ADMIXTURE is an unsupervised global ancestry inference technique based on ADMIXTURE. By using neural networks, Neural ADMIXTURE offers high quality ancestry assignments with a running time which is much faster than ADMIXTURE's. For more information, we recommend reading [the corresponding article](https://www.biorxiv.org/content/10.1101/2021.06.27.450081).
 
 The software can be invoked via CLI and has a similar interface to ADMIXTURE (_e.g._ the output format is completely interchangeable). While the software runs in both CPU and GPU, we recommend using GPUs if available to take advantage of the neural network-based implementation.
+
+![nadm_mna](https://github.com/AI-sandbox/neural-admixture/assets/31998088/048d04e2-8d62-4c14-870f-218e208dacb4)
 
 ## System requirements
 
