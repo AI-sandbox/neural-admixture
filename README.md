@@ -8,7 +8,7 @@
 
 # Neural ADMIXTURE
 
-Neural ADMIXTURE is an unsupervised global ancestry inference technique based on ADMIXTURE. By using neural networks, Neural ADMIXTURE offers high quality ancestry assignments with a running time which is much faster than ADMIXTURE's. For more information, we recommend reading [the corresponding article](https://www.biorxiv.org/content/10.1101/2021.06.27.450081).
+Neural ADMIXTURE is an unsupervised global ancestry inference technique based on ADMIXTURE. By using neural networks, Neural ADMIXTURE offers high quality ancestry assignments with a running time which is much faster than ADMIXTURE's. For more information, we recommend reading [the corresponding article](https://www.nature.com/articles/s43588-023-00482-7).
 
 The software can be invoked via CLI and has a similar interface to ADMIXTURE (_e.g._ the output format is completely interchangeable). While the software runs in both CPU and GPU, we recommend using GPUs if available to take advantage of the neural network-based implementation.
 
@@ -159,19 +159,19 @@ To run the software with a small demo dataset, check the instructions in [the co
 
 ## Cite
 
-When using this software, please cite the following paper (currently pre-print):
+When using this software, please cite the following paper:
 
 ```{tex}
-@article {Mantes2021.06.27.450081,
-	author = {Mantes, Albert Dominguez and Montserrat, Daniel Mas and Bustamante, Carlos D. and Gir{\'o}-i-Nieto, Xavier and Ioannidis, Alexander G.},
-	title = {Neural ADMIXTURE: rapid population clustering with autoencoders},
-	elocation-id = {2021.06.27.450081},
-	year = {2022},
-	doi = {10.1101/2021.06.27.450081},
-	publisher = {Cold Spring Harbor Laboratory},
-	abstract = {Characterizing the genetic substructure of large cohorts has become increasingly important as genetic association and prediction studies are extended to massive, increasingly diverse, biobanks. ADMIXTURE and STRUCTURE are widely used unsupervised clustering algorithms for characterizing such ancestral genetic structure. These methods decompose individual genomes into fractional cluster assignments with each cluster representing a vector of DNA marker frequencies. The assignments, and clusters, provide an interpretable representation for geneticists to describe population substructure at the sample level. However, with the rapidly increasing size of population biobanks and the growing numbers of variants genotyped (or sequenced) per sample, such traditional methods become computationally intractable. Furthermore, multiple runs with different hyperparameters are required to properly depict the population clustering using these traditional methods, increasing the computational burden. This can lead to days of compute. In this work we present Neural ADMIXTURE, a neural network autoencoder that follows the same modeling assumptions as ADMIXTURE, providing similar (or better) clustering, while reducing the compute time by orders of magnitude. Indeed, the equivalent of one month of continuous compute can be reduced to hours. In addition, Neural ADMIXTURE can include multiple outputs, providing the equivalent results as running the original ADMIXTURE algorithm many times with different numbers of clusters. Our models can also be stored, allowing later cluster assignment to be performed with a linear computational time. The software implementation of Neural ADMIXTURE can be found at https://github.com/ai-sandbox/neural-admixture.},
-	URL = {https://www.biorxiv.org/content/early/2022/01/14/2021.06.27.450081},
-	eprint = {https://www.biorxiv.org/content/early/2022/01/14/2021.06.27.450081.full.pdf},
-	journal = {bioRxiv}
-}
+@article{dominguezmantes23,
+	abstract = {Characterizing the genetic structure of large cohorts has become increasingly important as genetic studies extend to massive, increasingly diverse biobanks. Popular methods decompose individual genomes into fractional cluster assignments with each cluster representing a vector of DNA variant frequencies. However, with rapidly increasing biobank sizes, these methods have become computationally intractable. Here we present Neural ADMIXTURE, a neural network autoencoder that follows the same modeling assumptions as the current standard algorithm, ADMIXTURE, while reducing the compute time by orders of magnitude surpassing even the fastest alternatives. One month of continuous compute using ADMIXTURE can be reduced to just hours with Neural ADMIXTURE. A multi-head approach allows Neural ADMIXTURE to offer even further acceleration by computing multiple cluster numbers in a single run. Furthermore, the models can be stored, allowing cluster assignment to be performed on new data in linear time without needing to share the training samples.},
+	author = {Dominguez Mantes, Albert and Mas Montserrat, Daniel and Bustamante, Carlos D. and Gir{\'o}-i-Nieto, Xavier and Ioannidis, Alexander G.},
+	doi = {10.1038/s43588-023-00482-7},
+	id = {Dominguez Mantes2023},
+	isbn = {2662-8457},
+	journal = {Nature Computational Science},
+	title = {Neural ADMIXTURE for rapid genomic clustering},
+	url = {https://doi.org/10.1038/s43588-023-00482-7},
+	year = {2023},
+	bdsk-url-1 = {https://doi.org/10.1038/s43588-023-00482-7}}
+
 ```
