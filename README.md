@@ -8,7 +8,7 @@
 
 # Neural ADMIXTURE
 
-Neural ADMIXTURE is an unsupervised global ancestry inference technique based on ADMIXTURE. By using neural networks, Neural ADMIXTURE offers high quality ancestry assignments with a running time which is much faster than ADMIXTURE's. For more information, we recommend reading [the corresponding article](https://www.nature.com/articles/s43588-023-00482-7).
+Neural ADMIXTURE is an unsupervised global ancestry inference technique based on ADMIXTURE. By using neural networks, Neural ADMIXTURE offers high quality ancestry assignments with a running time which is much faster than ADMIXTURE's. For more information, we recommend reading [our corresponding article](https://www.nature.com/articles/s43588-023-00482-7).
 
 The software can be invoked via CLI and has a similar interface to ADMIXTURE (_e.g._ the output format is completely interchangeable). While the software runs in both CPU and GPU, we recommend using GPUs if available to take advantage of the neural network-based implementation.
 
@@ -26,9 +26,9 @@ The package has been tested on both Linux (CentOS 7.9.2009, Ubuntu 18.04.5 LTS) 
 We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `conda`), and then install the package `neural-admixture` there. As an example, for `virtualenv`, one should launch the following commands:
 
 ```console
-> virtualenv --python=python3.9 ~/venv/nadmenv
-> source ~/venv/nadmenv/bin/activate
-(nadmenv) > pip install neural-admixture
+$ virtualenv --python=python3.9 ~/venv/nadmenv
+$ source ~/venv/nadmenv/bin/activate
+(nadmenv) $ pip install neural-admixture
 ```
 
 ## Installation Guide
@@ -36,7 +36,7 @@ We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `con
 The package can be easily installed in at most a few minutes using `pip` (make sure to add the `--upgrade` flag if updating the version):
 
 ```console
-(nadmenv) > pip install neural-admixture
+(nadmenv) $ pip install neural-admixture
 ```
 
 ## Usage 
@@ -47,31 +47,31 @@ To train a model from scratch, simply invoke the following commands from the roo
 For unsupervised Neural ADMIXTURE (single-head):
 
 ```console
-> neural-admixture train --k K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_file INIT_FILE
+$ neural-admixture train --k K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_file INIT_FILE
 ````
 
 For unsupervised Neural ADMIXTURE (multi-head):
 
 ```console
-> neural-admixture train --min_k MIN_K --max_k MAX_K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_file INIT_FILE
+$ neural-admixture train --min_k MIN_K --max_k MAX_K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_file INIT_FILE
 ```
 
 For supervised Neural ADMIXTURE:
 
 ```console
-> neural-admixture train --k K --supervised --populations_path POPS_PATH --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH # only single-head support at the moment
+$ neural-admixture train --k K --supervised --populations_path POPS_PATH --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH # only single-head support at the moment
 ```
 
 As an example, the following ADMIXTURE call
 
 ```console
-> ./admixture snps_data.bed 8 -s 42
+$ ./admixture snps_data.bed 8 -s 42
 ```
 
 would be mimicked in Neural ADMIXTURE by running
 
 ```console
-> neural-admixture train --k 8 --data_path snps_data.bed --save_dir SAVE_PATH --init_file INIT_FILE --name snps_data --seed 42
+$ neural-admixture train --k 8 --data_path snps_data.bed --save_dir SAVE_PATH --init_file INIT_FILE --name snps_data --seed 42
 ```
 
 with some parameters such as the decoder initialization or the save directories not having a direct equivalent.
@@ -86,7 +86,7 @@ Several files will be output to the `SAVE_PATH` directory (the `name` parameter 
 The last two files are required to run posterior inference using the network, so be aware of not deleting them accidentally! Logs are printed to the `stdout` channel by default. If you want to save them to a file, you can use the command `tee` along with a pipe:
 
 ```console
-> neural-admixture train --k 8 ... | tee run.log
+$ neural-admixture train --k 8 ... | tee run.log
 ```
 
 ### Initialization method
@@ -105,7 +105,7 @@ ADMIXTURE allows reusing computations in the _projective analysis_ mode, in whic
 For example, assuming we have a trained Neural ADMIXTURE (named `nadm_test`) in the path `./outputs`, one could run inference on unseen data (`./data/unseen_data.vcf`) via the following command:
 
 ```console
-> neural-admixture infer --name nadm_test --save_dir ./outputs --out_name unseen_nadm_test --data_path ./data/unseen_data.vcf
+$ neural-admixture infer --name nadm_test --save_dir ./outputs --out_name unseen_nadm_test --data_path ./data/unseen_data.vcf
 ```
 
 For this command to work, files `./outputs/nadm_test.pt` and `./outputs/nadm_test_config.json`, which are training outputs, must exist. In this case, only a `.Q` will be created, which will contain the assignments for this data (the parameter of the flag `out_name` will be used to generate the output file name). This file will be written in the `--save_dir` directory (in this case, `./outputs`).
@@ -147,7 +147,7 @@ If the data format you will be working on is _Plink2 Binary Files (.pgen, .psam,
 
 ## Experiments replication
 
-The datasets _All-Chms_, _Chm-22_ and _Chm-22-Sim_ used in the Experiments section of the article can be found in [figshare](https://doi.org/10.6084/m9.figshare.19387538.v1). For descriptions of the datasets, please refer to the corresponding section in the paper. The exact hyperparameters used in the experiments to allow replication can be found in Appendix B of the article.
+The datasets _All-Chms_, _Chm-22_ and _Chm-22-Sim_ used in the Experiments section of the article can be found in [figshare](https://doi.org/10.6084/m9.figshare.19387538.v1). For descriptions of the datasets, please refer to the corresponding section in the paper. The exact hyperparameters used in the experiments to allow replication can be found in the Supplementary Table 3 of the article.
 
 ## Demo
 
