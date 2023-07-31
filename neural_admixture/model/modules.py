@@ -36,12 +36,12 @@ class NeuralDecoder(nn.Module):
     def __init__(self, ks, output_size, bias=False, inits=None, freeze=False):
         super().__init__()
         self.ks = ks
-        self.freeze = freeze
+        self.force_freeze = freeze
         if inits is None:
             self.decoders = nn.ModuleList(
                 [nn.Linear(k, output_size, bias=bias) for k in self.ks]
             )
-            if self.freeze:
+            if freeze:
                 log.warn('Not going to freeze weights as no initialization was provided.')   
         else:
             layers = [None]*len(self.ks)
@@ -49,10 +49,11 @@ class NeuralDecoder(nn.Module):
                 ini = end if i != 0 else 0
                 end = ini+self.ks[i]
                 layers[i] = nn.Linear(self.ks[i], output_size, bias=bias)
-                layers[i].weight = torch.nn.Parameter(inits[ini:end].clone().detach().requires_grad_(not self.freeze).T)
+                layers[i].weight = torch.nn.Parameter(inits[ini:end].clone().detach().T)
             self.decoders = nn.ModuleList(layers)
-            if self.freeze:
+            if self.force_freeze:
                 log.info('Decoder weights will be frozen.')
+                self.freeze()
         assert len(self.decoders) == len(self.ks)
 
     def _get_decoder_for_k(self, k):
@@ -61,4 +62,13 @@ class NeuralDecoder(nn.Module):
     def forward(self, hid_states):
         outputs = [torch.clamp(self._get_decoder_for_k(self.ks[i])(hid_states[i]), 0, 1) for i in range(len(self.ks))]
         return outputs
-
+    
+    def freeze(self) -> None:
+        for param in self.parameters():
+            param.requires_grad = False
+        return
+    
+    def unfreeze(self) -> None:
+        for param in self.parameters():
+            param.requires_grad = True
+        return

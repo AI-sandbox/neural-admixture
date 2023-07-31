@@ -64,7 +64,7 @@ class PCKMeansInitialization(object):
                     raise FileNotFoundError
             else:
                 raise FileNotFoundError
-        except FileNotFoundError as fnfe:
+        except FileNotFoundError as _:
             log.info(f"{n_components}D PCA object not found. Performing IncrementalPCA...")
             pca_obj = DaskIncrementalPCA(n_components=n_components, random_state=42, batch_size=batch_size)
             pca_obj.fit(X)
@@ -80,10 +80,14 @@ class PCKMeansInitialization(object):
         if isinstance(K, Iterable):
             k_means_objs = [KMeans(n_clusters=i, random_state=42, n_init=10, max_iter=10).fit(X_pca) for i in K]
             centers = np.concatenate([obj.cluster_centers_ for obj in k_means_objs])
+            dists = [obj.transform(X_pca) for obj in k_means_objs]
+            Q_inits = [torch.as_tensor(-d, dtype=torch.float32).softmax(dim=1) for d in dists]
             P_init = torch.as_tensor(pca_obj.inverse_transform(centers).compute(), dtype=torch.float32).view(sum(K), -1)
         else:
             k_means_obj = KMeans(n_clusters=K, random_state=42, n_init=10, max_iter=10).fit(X_pca)
+            dists = k_means_obj.transform(X_pca)
             P_init = torch.as_tensor(pca_obj.inverse_transform(k_means_obj.cluster_centers_).compute(), dtype=torch.float32).view(K, -1)
+            Q_inits = [torch.as_tensor(-dists, dtype=torch.float32).softmax(dim=1)]
         te = time.time()
         log.info('Weights initialized in {} seconds.'.format(te-t0))
         log.info('Rendering PCA plot...')
@@ -94,7 +98,7 @@ class PCKMeansInitialization(object):
         except Exception as e:
             log.warn(f'Could not render PCA plot: {e}')
             log.info('Resuming...')
-        return P_init
+        return P_init, Q_inits
 
 class PCArchetypal(object):
     """PCArchetypal initialization
@@ -154,7 +158,7 @@ class PCArchetypal(object):
         except Exception as e:
             log.warn(f'Could not render PCA plot: {e}')
             log.info('Resuming...')
-        return P_init
+        return P_init, None
 
 
 class SupervisedInitialization(object):
@@ -180,7 +184,7 @@ class SupervisedInitialization(object):
         P_init = torch.as_tensor(np.vstack([X_masked[masked_y_num==idx,:].mean(axis=0).compute() for idx in range(k)]), dtype=torch.float32)
         te = time.time()
         log.info('Weights initialized in {} seconds.'.format(te-t0))
-        return P_init
+        return P_init, None
 
 
 class PretrainedInitialization(object):
@@ -195,4 +199,4 @@ class PretrainedInitialization(object):
         P_init = torch.as_tensor(1-np.genfromtxt(path, delimiter=' ').T, dtype=torch.float32)
         assert P_init.shape[0] == K[0], 'Input P is not coherent with the value of K'
         log.info('Weights fetched.')
-        return P_init
+        return P_init, None

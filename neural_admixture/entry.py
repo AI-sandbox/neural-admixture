@@ -6,8 +6,11 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 def main():
-    # nadm_version = version("neural-admixture")
     log.info(f"Neural ADMIXTURE - Version {__version__}")
+    log.info("[CHANGELOG] Default initialization was changed to 'pckmeans' in version 1.3.0.")
+    log.info("[CHANGELOG] Warmup training to stabilize results was added in version 1.3.0.")
+    log.info("[CHANGELOG] Convergence check changed so it is performed after 15 epochs to improve training stability in version 1.3.0.")
+    log.info("[CHANGELOG] Default learning rate was changed to 1e-5 instead of 1e-4 to improve training stability in version 1.3.0.")
     arg_list = tuple(sys.argv)
     assert len(arg_list) > 1, 'Please provide either the argument "train" or "infer" to choose running mode.'
     if sys.argv[1] == 'train':

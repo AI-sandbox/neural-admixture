@@ -9,7 +9,7 @@ import wandb
 
 import dask.array as da
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 from .snp_reader import SNPReader
 from ..model.neural_admixture import NeuralAdmixture
@@ -23,9 +23,9 @@ def parse_train_args(argv: List[str]):
     parser = configargparse.ArgumentParser(prog='neural-admixture train',
                                            description='Rapid population clustering with autoencoders - training mode',
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
-    parser.add_argument('--learning_rate', required=False, default=0.0001, type=float, help='Learning rate')
+    parser.add_argument('--learning_rate', required=False, default=1e-5, type=float, help='Learning rate')
     parser.add_argument('--max_epochs', required=False, type=int, default=50, help='Maximum number of epochs')
-    parser.add_argument('--initialization', required=False, type=str, default = 'pcarchetypal',
+    parser.add_argument('--initialization', required=False, type=str, default = 'pckmeans',
                         choices=['pretrained', 'pckmeans', 'supervised', 'pcarchetypal'],
                         help='Decoder initialization (overriden if supervised)')
     parser.add_argument('--optimizer', required=False, default='adam', type=str, choices=['adam', 'sgd'], help='Optimizer')
@@ -54,6 +54,8 @@ def parse_train_args(argv: List[str]):
     parser.add_argument('--name', required=True, type=str, help='Experiment/model name')
     parser.add_argument('--batch_size', required=False, default=400, type=int, help='Batch size')
     parser.add_argument('--supervised_loss_weight', required=False, default=0.05, type=float, help='Weight given to the supervised loss')
+    parser.add_argument('--warmup_epochs', required=False, default=10, type=int, help='Number of warmup epochs to bring Q to a good initialization. Set to 0 to skip warmup.')
+    # parser.add_argument('--cv', required=False, default=None, type=int, help='Number of folds for cross-validation')
     return parser.parse_args(argv)
 
 def parse_infer_args(argv: List[str]):
@@ -109,7 +111,7 @@ def read_data(tr_file: str, val_file: str=None, tr_pops_f: str=None, val_pops_f:
         val_pops_f (str, optional): denotes the path containing the validation populations file. Defaults to None.
 
     Returns:
-        _type_: _description_
+        Tuple[da.core.Array, Union[None, da.core.Array], Union[None, List[str]], Union[None, List[str]]]: data objects
     """
     ''' 
     tr_file: string denoting the path of the main data file. The format of this file must be either HDF5 or VCF.
@@ -163,15 +165,38 @@ def get_model_predictions(model: NeuralAdmixture, data: da.core.Array, bsize: in
         device (torch.device): torch device.
 
     Returns:
-        _type_: _description_
+        List[np.ndarray]: list of Q matrices
     """
     model.to(torch.device(device))
     outs = [torch.tensor([]) for _ in range(len(model.ks))]
     model.eval()
     with torch.inference_mode():
-        for X, _ in model.batch_generator(data, bsize, shuffle=False):
+        for X, _, _ in model.batch_generator(data, bsize, shuffle=False):
             X = X.to(device)
             out = model(X, True)
+            for j in range(len(model.ks)):
+                outs[j] = torch.cat((outs[j], out[j].detach().cpu()), axis=0)
+    return [out.cpu().numpy() for out in outs]
+
+def get_model_reconstructions(model: NeuralAdmixture, data: da.core.Array, bsize: int, device: torch.device) -> List[np.ndarray]:
+    """Helper function to run inference on data
+
+    Args:
+        model (NeuralAdmixture): trained model object.
+        data (da.core.Array): Dask array containing data to get results from.
+        bsize (int): batch size.
+        device (torch.device): torch device.
+
+    Returns:
+        List[np.ndarray]: list of reconstructions (matrix product of Q and P) for different Ks
+    """
+    model.to(torch.device(device))
+    outs = [torch.tensor([]) for _ in range(len(model.ks))]
+    model.eval()
+    with torch.inference_mode():
+        for X, _, _ in model.batch_generator(data, bsize, shuffle=False):
+            X = X.to(device)
+            out, _ = model(X)
             for j in range(len(model.ks)):
                 outs[j] = torch.cat((outs[j], out[j].detach().cpu()), axis=0)
     return [out.cpu().numpy() for out in outs]
@@ -208,3 +233,26 @@ def write_outputs(model: NeuralAdmixture, trX: da.core.Array, valX: Union[da.cor
             np.savetxt(out_path/f"{run_name}_validation.{k}.Q", val_preds[i], delimiter=' ')
     return 0
 
+def compute_deviances(model: NeuralAdmixture, data: da.core.Array, bsize: int, device: torch.device) -> Dict[int, float]:
+    """_summary_
+
+    Args:
+        model (NeuralAdmixture): _description_
+        trX (np.ndarray): _description_
+        bsize (int): _description_
+        device (torch.device): _description_
+
+    Returns:
+        Dict[int, float]: _description_
+    """
+    eps = 1e-7
+    reconstructions = get_model_reconstructions(model, data, bsize, device)
+    data_tmp = 2*data # Multiply by 2 to get to same reconstruction range to ADMIXTURE
+    data_tmp = da.clip(data_tmp, eps, 2-eps) # To avoid log(0)
+    deviances = {}
+    for rec, K in zip(reconstructions, model.ks):
+        rec *= 2 # Multiply by 2 to get to same reconstruction range to ADMIXTURE
+        rec = da.clip(rec, eps, 2-eps) # To avoid division by zero
+        deviance = (data_tmp * da.log(data_tmp/rec) + (2-data_tmp) * da.log((2-data_tmp)/(2-rec)))**2
+        deviances[K] = da.mean(deviance).compute()
+    return deviances

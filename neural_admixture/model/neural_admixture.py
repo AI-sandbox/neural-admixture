@@ -1,3 +1,4 @@
+import dask
 import dask.array as da
 import json
 import logging
@@ -83,7 +84,8 @@ class NeuralAdmixture(nn.Module):
                         device: torch.device, batch_size: int=0, valX: Optional[da.core.Array]=None,
                         save_every: int=10, save_path: str='../outputs/model.pt',
                         trY: Optional[Iterable[str]]=None, valY: Optional[Iterable[str]]=None, seed: int=42,
-                        shuffle: bool=True, log_to_wandb: bool=False, tol: float=1e-5) -> int:
+                        shuffle: bool=True, log_to_wandb: bool=False, tol: float=1e-5, dry_run: bool=False,
+                        warmup_epochs: int=10, Q_inits: Optional[Iterable[torch.Tensor]]=None) -> int:
         """Launch training pipeline of the model
 
         Args:
@@ -102,7 +104,9 @@ class NeuralAdmixture(nn.Module):
             shuffle (bool, optional): whether to shuffle the samples at every epoch. Defaults to True.
             log_to_wandb (bool, optional): whether to log training to wandb. Defaults to False.
             tol (float, optional): tolerance for early stopping. Training will stop if decrease in loss is smaller than this value. Defaults to 1e-5.
-
+            dry_run (bool, optional): whether to run a dry run (no output is written to disk). Defaults to False.
+            warmup_epochs (int, optional): number of warmup epochs to bring Q to a good initial solution. If 0, no warmup is performed. Defaults to 10.
+            Q_inits(Optional[Iterable[torch.Tensor]], optional): initial Q values for warmup. Defaults to None.
         Returns:
             int: number of actual training epochs ran
         """
@@ -122,7 +126,17 @@ class NeuralAdmixture(nn.Module):
             loss_f_supervised = nn.CrossEntropyLoss(reduction='mean')
         log.info("Bringing training data into memory...")
         trX = trX.compute()
+        log.info("Running warmup epochs...")
+        if warmup_epochs > 0:
+            self.decoders.freeze()
+            loss_f_warmup = nn.BCELoss(reduction='mean')
+            opt_warmup = torch.optim.AdamW(self.common_encoder.parameters(), lr=1e-5)
+            for wep in range(warmup_epochs):
+                _, _ = self._run_warmup_epoch(trX, Q_inits, opt_warmup, loss_f_warmup, batch_size, device, shuffle, epoch_num=wep+1)
+            if not self.decoders.force_freeze:
+                self.decoders.unfreeze()
         for ep in range(num_epochs):
+            log.info("Training...")
             tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, shuffle, loss_f_supervised, trY_num, valY_num, epoch_num=ep+1)
             tr_losses.append(tr_loss)
             val_losses.append(val_loss)
@@ -136,9 +150,9 @@ class NeuralAdmixture(nn.Module):
             log.info(f'[METRICS] EPOCH {ep+1}: mean training loss: {tr_loss}, diff: {tr_diff}')
             if val_loss is not None:
                 log.info(f'[METRICS] EPOCH {ep+1}: mean validation loss: {val_loss}, diff: {val_diff}')
-            if save_every*ep > 0 and ep % save_every == 0:
+            if not dry_run and save_every*ep > 0 and ep % save_every == 0:
                 torch.save(self.state_dict(), save_path)
-            if ep > 0 and tol > 0 and self._has_converged(tr_diff, tol):
+            if ep > 15 and tol > 0 and self._has_converged(tr_diff, tol):
                 log.info(f'Convergence criteria met. Stopping fit after {ep+1} epochs...')
                 return ep+1
         log.info(f'Max epochs reached. Stopping fit...')
@@ -158,25 +172,37 @@ class NeuralAdmixture(nn.Module):
         return torch.norm(shared_params, p)+torch.norm(multihead_params, p)
 
     def _run_step(self, X: torch.Tensor, optimizer: torch.optim.Optimizer, loss_f: torch.nn.modules.loss._Loss,
-                  loss_f_supervised=Optional[torch.nn.modules.loss._Loss], y=Optional[Iterable[str]]):
+                  loss_f_supervised: Optional[torch.nn.modules.loss._Loss], y: Optional[Iterable[str]],
+                  warmup: Optional[bool]=False, Q_inits: Optional[Iterable[torch.Tensor]]=None) -> float:
         """Run a single optimization step
         Args:
             X (torch.Tensor): mini-batch of data
             optimizer (torch.optim.Optimizer): loaded optimizer to use
             loss_f (torch.nn.modules.loss._Loss): instantiated loss function to use
-            loss_f_supervied (Optional[torch.nn.modules.loss._Loss]): instantiated supervied loss function to use
+            loss_f_supervised (Optional[torch.nn.modules.loss._Loss]): instantiated supervied loss function to use
             y (Optional[Iterable[str]], optional): list of training populations per sample. Defaults to None.
+            warmup (Optional[bool], optional): whether to run a warmup step. Defaults to False.
+            Q_inits (Optional[Iterable[torch.Tensor]], optional): list of Q initialization matrices. Defaults to None.
 
         Returns:
             float: loss value of the mini-batch
         """
         optimizer.zero_grad(set_to_none=True)
-        recs, hid_states = self(X)
-        loss = sum((loss_f(rec, X) for rec in recs))
+        if warmup:
+            hid_states = self(X, only_assignments=True)
+            recs = None
+        else:
+            recs, hid_states = self(X)
+        if Q_inits is None and not warmup: # Regular step
+            loss = sum((loss_f(rec, X) for rec in recs))
+        elif Q_inits is not None and warmup: # Warmup step
+            loss = sum((loss_f(h, Q_init) for h, Q_init in zip(hid_states, Q_inits)))
+        else:
+            raise ValueError("Cannot provide Q initialization for a regular step")
         if loss_f_supervised is not None:  # Currently only implemented for single-head architecture!
             mask = y > -1
             loss += sum((self.supervised_loss_weight*loss_f_supervised(h[mask], y[mask]) for h in hid_states))
-        if self.lambda_l2 > 0:
+        if not warmup and self.lambda_l2 > 0:
             loss += self.lambda_l2*self._get_encoder_norm(2)**2
         del recs, hid_states
         loss.backward()
@@ -213,17 +239,24 @@ class NeuralAdmixture(nn.Module):
                 acum_val_loss += self.lambda_l2*self._get_encoder_norm()**2
         return acum_val_loss
 
-    def batch_generator(self, X, batch_size=0, shuffle=True, y=None):
+    def batch_generator(self, X, batch_size=0, shuffle=True, y=None, Q_inits=None):
         is_inmem = not isinstance(X, da.core.Array)
         idxs = [i for i in range(X.shape[0])]
         if shuffle:
             random.shuffle(idxs)
         if batch_size < 1:
-            yield torch.as_tensor(X.compute() if not is_inmem else X, dtype=torch.float32), torch.as_tensor(y, dtype=torch.int64) if y is not None else None
+            batch_size = X.shape[0]
         else:
             for i in range(0, X.shape[0], batch_size):
-                to_yield = X[sorted(idxs[i:i+batch_size])]
-                yield torch.as_tensor(to_yield.compute() if not is_inmem else to_yield, dtype=torch.float32), torch.as_tensor(y[sorted(idxs[i:i+batch_size])], dtype=torch.int64) if y is not None else None
+                with dask.config.set(**{'array.slicing.split_large_chunks': True}):
+                    to_yield_X, to_yield_y, to_yield_Y_warmup = X[sorted(idxs[i:i+batch_size])], None, None
+                if not is_inmem:
+                    to_yield_X = to_yield_X.compute()
+                if y is not None:
+                    to_yield_y = torch.as_tensor(y[sorted(idxs[i:i+batch_size])], dtype=torch.int64)
+                if Q_inits is not None:
+                    to_yield_Y_warmup = [Q[sorted(idxs[i:i+batch_size])] for Q in Q_inits]
+                yield torch.as_tensor(to_yield_X, dtype=torch.float32), to_yield_y, to_yield_Y_warmup
 
     def _run_epoch(self, trX, optimizer, loss_f, batch_size, valX,
                    device, shuffle=True, loss_f_supervised=None,
@@ -231,14 +264,28 @@ class NeuralAdmixture(nn.Module):
         tr_loss, val_loss = 0, None
         self.train()
         total_b = trX.shape[0]//batch_size+1
-        for X, y in tqdm(self.batch_generator(trX, batch_size, shuffle=shuffle, y=trY if loss_f_supervised is not None else None), desc=f"Epoch {epoch_num}", total=total_b):
+        for X, y, _ in tqdm(self.batch_generator(trX, batch_size, shuffle=shuffle, y=trY if loss_f_supervised is not None else None), desc=f"Epoch {epoch_num}", total=total_b):
             step_loss = self._run_step(X.to(device), optimizer, loss_f, loss_f_supervised, y.to(device) if y is not None else None)
             tr_loss += step_loss
         if valX is not None:
             self.eval()
             val_loss = self._validate(valX, loss_f, batch_size, device, loss_f_supervised, valY)
-            return tr_loss / trX.shape[0], val_loss / valX.shape[0]
-        return tr_loss / trX.shape[0], None
+            return tr_loss/trX.shape[0], val_loss/valX.shape[0]
+        return tr_loss/trX.shape[0], None
+
+    def _run_warmup_epoch(self, trX, Q_inits, optimizer, loss_f, batch_size,
+                          device, shuffle=True, epoch_num=0) -> Tuple[float, Union[float, None]]:
+        tr_loss = 0
+        total_b = trX.shape[0]//batch_size+1
+        self.train()
+        for X, _, Ys in tqdm(self.batch_generator(trX, batch_size, shuffle=shuffle, Q_inits=Q_inits), desc=f"Warmup epoch {epoch_num}", total=total_b):
+            step_loss = self._run_step(X.to(device), optimizer, loss_f,
+                                       None, None, warmup=True,
+                                       Q_inits=[Y.to(device) for Y in Ys])
+            tr_loss += step_loss
+        log.info(f"Warmup training loss: {tr_loss/trX.shape[0]}")# !
+        return tr_loss/trX.shape[0], None
+
 
     @staticmethod
     def _has_converged(diff, tol):
