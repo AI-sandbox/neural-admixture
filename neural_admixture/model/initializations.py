@@ -1,3 +1,4 @@
+import dask
 import dask.array as da
 import logging
 import matplotlib.pyplot as plt
@@ -180,7 +181,8 @@ class SupervisedInitialization(object):
         y_num = to_idx_mapper(y[:])
         mask = y_num > -1
         masked_y_num = y_num[mask]
-        X_masked = X[mask,:]
+        with dask.config.set(**{'array.slicing.split_large_chunks': False}):
+            X_masked = X[mask,:]
         P_init = torch.as_tensor(np.vstack([X_masked[masked_y_num==idx,:].mean(axis=0).compute() for idx in range(k)]), dtype=torch.float32)
         te = time.time()
         log.info('Weights initialized in {} seconds.'.format(te-t0))

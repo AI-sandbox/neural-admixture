@@ -128,15 +128,18 @@ class NeuralAdmixture(nn.Module):
         trX = trX.compute()
         log.info("Running warmup epochs...")
         if warmup_epochs > 0:
-            self.decoders.freeze()
-            loss_f_warmup = nn.BCELoss(reduction='mean')
-            opt_warmup = torch.optim.AdamW(self.common_encoder.parameters(), lr=1e-5)
-            for wep in range(warmup_epochs):
-                _, _ = self._run_warmup_epoch(trX, Q_inits, opt_warmup, loss_f_warmup, batch_size, device, shuffle, epoch_num=wep+1)
-            if not self.decoders.force_freeze:
-                self.decoders.unfreeze()
+            if Q_inits is None:
+                log.warning("No Q initialization was provided. Skipping warmup epochs.")
+            else:
+                self.decoders.freeze()
+                loss_f_warmup = nn.BCELoss(reduction='mean')
+                opt_warmup = torch.optim.AdamW(self.common_encoder.parameters(), lr=1e-5)
+                for wep in range(warmup_epochs):
+                    _, _ = self._run_warmup_epoch(trX, Q_inits, opt_warmup, loss_f_warmup, batch_size, device, shuffle, epoch_num=wep+1)
+                if not self.decoders.force_freeze:
+                    self.decoders.unfreeze()
+        log.info("Training...")
         for ep in range(num_epochs):
-            log.info("Training...")
             tr_loss, val_loss = self._run_epoch(trX, optimizer, loss_f, batch_size, valX, device, shuffle, loss_f_supervised, trY_num, valY_num, epoch_num=ep+1)
             tr_losses.append(tr_loss)
             val_losses.append(val_loss)
