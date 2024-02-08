@@ -142,3 +142,9 @@ outputs/
 
 # figures
 **figures**
+
+# DS_Store
+**/.DS_Store
+
+# Version file
+neural_admixture/_version.py

@@ -7,6 +7,7 @@ log = logging.getLogger(__name__)
 
 def main():
     log.info(f"Neural ADMIXTURE - Version {__version__}")
+    log.info("[CHANGELOG] Mean imputation for missing data was added in version 1.4.0. To reproduce old behaviour, please use `--imputation zero` when invoking the software.")
     log.info("[CHANGELOG] Default P initialization was changed to 'pckmeans' in version 1.3.0.")
     log.info("[CHANGELOG] Warmup training for initialization of Q was added in version 1.3.0 to improve training stability (only for `pckmeans`).")
     log.info("[CHANGELOG] Convergence check changed so it is performed after 15 epochs in version 1.3.0 to improve training stability.")

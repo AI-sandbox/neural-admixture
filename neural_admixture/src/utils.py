@@ -55,6 +55,7 @@ def parse_train_args(argv: List[str]):
     parser.add_argument('--batch_size', required=False, default=400, type=int, help='Batch size')
     parser.add_argument('--supervised_loss_weight', required=False, default=0.05, type=float, help='Weight given to the supervised loss')
     parser.add_argument('--warmup_epochs', required=False, default=10, type=int, help='Number of warmup epochs to bring Q to a good initialization. Set to 0 to skip warmup.')
+    parser.add_argument('--imputation', type=str, default='mean', choices=['mean', 'zero'], help='Imputation method for missing data (zero or mean)')
     # parser.add_argument('--cv', required=False, default=None, type=int, help='Number of folds for cross-validation')
     return parser.parse_args(argv)
 
@@ -101,7 +102,7 @@ def initialize_wandb(run_name: str, trX: da.core.Array, valX: da.core.Array, arg
                          'out_path': out_path})
     return run_name
 
-def read_data(tr_file: str, val_file: str=None, tr_pops_f: str=None, val_pops_f: str=None) -> Tuple[da.core.Array, Union[None, da.core.Array], Union[None, List[str]], Union[None, List[str]]]:
+def read_data(tr_file: str, val_file: str=None, tr_pops_f: str=None, val_pops_f: str=None, imputation: str="mean") -> Tuple[da.core.Array, Union[None, da.core.Array], Union[None, List[str]], Union[None, List[str]]]:
     """Read data in any compatible format
 
     Args:
@@ -122,8 +123,8 @@ def read_data(tr_file: str, val_file: str=None, tr_pops_f: str=None, val_pops_f:
     tr_pops, val_pops = None, None
     log.info('Reading data...')
     snp_reader = SNPReader()
-    tr_snps = snp_reader.read_data(tr_file)
-    val_snps = snp_reader.read_data(val_file) if val_file else None
+    tr_snps = snp_reader.read_data(tr_file, imputation)
+    val_snps = snp_reader.read_data(val_file, imputation) if val_file else None
     if tr_pops_f:
         with open(tr_pops_f, 'r') as fb:
             tr_pops = [p.strip() for p in fb.readlines()]
@@ -234,16 +235,16 @@ def write_outputs(model: NeuralAdmixture, trX: da.core.Array, valX: Union[da.cor
     return 0
 
 def compute_deviances(model: NeuralAdmixture, data: da.core.Array, bsize: int, device: torch.device) -> Dict[int, float]:
-    """_summary_
+    """Compute deviances for CV error
 
     Args:
-        model (NeuralAdmixture): _description_
-        trX (np.ndarray): _description_
-        bsize (int): _description_
-        device (torch.device): _description_
+        model (NeuralAdmixture): trained model object.
+        trX (np.ndarray): training data matrix.
+        bsize (int): batch size to retrieve the predictions.
+        device (torch.device): computing device.
 
     Returns:
-        Dict[int, float]: _description_
+        Dict[int, float]: dictionary containing deviance value for each K
     """
     eps = 1e-7
     reconstructions = get_model_reconstructions(model, data, bsize, device)

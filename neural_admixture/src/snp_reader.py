@@ -4,6 +4,7 @@ import numpy as np
 import sys
 
 from pathlib import Path
+from typing import Literal
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -24,9 +25,6 @@ class SNPReader:
         import allel
         f_tr = allel.read_vcf(file)
         calldata = f_tr["calldata/GT"]
-        if np.isnan(calldata).any():
-            log.warning("Data contains missing values. Will perform zero-imputation.")
-            calldata = np.nan_to_num(calldata, nan=0.)
         return np.sum(calldata, axis=2).T/2
     
     def _read_hdf5(self, file: str) -> np.ndarray:
@@ -55,9 +53,6 @@ class SNPReader:
         log.info('Input format is BED.')
         from pandas_plink import read_plink
         _, _, G = read_plink(str(Path(file).with_suffix("")))
-        if da.isnan(G).any().compute():
-            log.warning("Data contains missing values. Will perform zero-imputation.")
-            G = da.nan_to_num(G, 0.)
         return (G.T/2)
     
     def _read_pgen(self, file: str) -> np.ndarray:
@@ -81,9 +76,6 @@ class SNPReader:
         pgen_reader = pg.PgenReader(pgen)
         calldata = np.ascontiguousarray(np.empty((pgen_reader.get_variant_ct(), 2*pgen_reader.get_raw_sample_ct())).astype(np.int32))
         pgen_reader.read_alleles_range(0, pgen_reader.get_variant_ct(), calldata)
-        if np.isnan(calldata).any():
-            log.warning("Data contains missing values. Will perform zero-imputation.")
-            calldata = np.nan_to_num(calldata, nan=0.)
         return (calldata[:,::2]+calldata[:,1::2]).T/2
     
     def _read_npy(self, file: str) -> np.ndarray:
@@ -98,18 +90,16 @@ class SNPReader:
         log.info('Input format is NPY.')
         calldata = np.load(file)
         assert calldata.ndim in [2, 3]
-        if np.isnan(calldata).any():
-            log.warning("Data contains missing values. Will perform zero-imputation.")
-            calldata = np.nan_to_num(calldata, nan=0.)
         if calldata.ndim == 2:
             return calldata/2
         return np.nan_to_num(calldata, nan=0.).sum(axis=2)/2
     
-    def read_data(self, file: str) -> da.core.Array:
+    def read_data(self, file: str, imputation: str) -> da.core.Array:
         """Wrapper of readers
 
         Args:
             file (str): path to file
+            imputation (str): imputation method. Should be either 'zero' or 'mean'
 
         Returns:
             da.core.Array: averaged genotype Dask array of shape (n_samples, n_snps)
@@ -128,6 +118,29 @@ class SNPReader:
         else:
             log.error('Invalid format. Unrecognized file format. Make sure file ends with .vcf | .vcf.gz | .bed | .pgen | .h5 | .hdf5 | .npy')
             sys.exit(1)
-        assert int(G.min()) == 0 and int(G.max()) == 1, 'Only biallelic SNPs are supported. Please make sure multiallelic sites have been removed.'
-        G_corr = G if np.mean(G) < 0.5 else 1-G
-        return G_corr if isinstance(G_corr, da.core.Array) else da.from_array(G_corr)
+        if isinstance(G, np.ndarray):
+            G = da.from_array(G)
+        G = self._impute(G, method=imputation)
+        assert int(G.min().compute()) == 0 and int(G.max().compute()) == 1, 'Only biallelic SNPs are supported. Please make sure multiallelic sites have been removed.'
+        return G if G.mean().compute() < 0.5 else 1-G
+
+    @staticmethod
+    def _impute(G: da.core.Array, method: Literal["zero", "mean"]="mean") -> da.core.Array:
+        """Impute missing values
+
+        Args:
+            G (da.core.Array): genotype array
+
+        Returns:
+            da.core.Array: imputed genotype array
+        """
+        if da.isnan(G).any().compute():
+            log.warning(f"Data contains missing values. Will perform {method}-imputation.")
+            if method == "zero":
+                return da.nan_to_num(G, 0.)
+            elif method == "mean":
+                snp_means = da.nanmean(G, axis=0)[None, :]
+                return da.where(da.isnan(G), snp_means, G)
+            else:
+                raise ValueError("Invalid imputation method. Only 'zero' and 'mean' are supported.")
+        return G

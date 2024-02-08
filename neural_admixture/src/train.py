@@ -134,9 +134,9 @@ def main(argv: List[str]):
     """
     args = utils.parse_train_args(argv)
     tr_file, val_file = args.data_path, args.validation_data_path
-    assert not (val_file and args.cv is not None), 'Cross-validation not available when validation data path is provided.'
+    # assert not (val_file and args.cv is not None), 'Cross-validation not available when validation data path is provided.'
     tr_pops_f, val_pops_f = args.populations_path, args.validation_populations_path
-    trX, trY, valX, valY = utils.read_data(tr_file, val_file, tr_pops_f, val_pops_f)
+    trX, trY, valX, valY = utils.read_data(tr_file, val_file, tr_pops_f, val_pops_f, imputation=args.imputation)
     """
     if args.cv is not None:
         log.info(f'Performing {args.cv}-fold cross-validation...')
