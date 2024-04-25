@@ -145,6 +145,8 @@ Moreover, note that the initialization method chosen will have no effect, as the
 
 If the data format you will be working on is _Plink2 Binary Files (.pgen, .psam, .pvar)_ then you also need to install the package `pgenlib`. This package is not available in PyPi, but is included in the [plink repository](https://github.com/chrchang/plink-ng/tree/master/2.0/Python). Installation instructions can be found in the [corresponding `README.md` file](https://github.com/chrchang/plink-ng/blob/master/2.0/Python/ReadMe.md). While you will need to clone the whole repository, you can remove it after installing the package, unless you plan to work with it.
 
+**UPDATE**: `pgenlib` is now available on PyPi and can be installed via `pip`.
+
 ## Experiments replication
 
 The datasets _All-Chms_, _Chm-22_ and _Chm-22-Sim_ used in the Experiments section of the article can be found in [figshare](https://doi.org/10.6084/m9.figshare.19387538.v1). For descriptions of the datasets, please refer to the corresponding section in the paper. The exact hyperparameters used in the experiments to allow replication can be found in the Supplementary Table 3 of the article.
