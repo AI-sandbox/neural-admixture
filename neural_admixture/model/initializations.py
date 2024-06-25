@@ -74,7 +74,8 @@ class PCKMeansInitialization(object):
                     pickle.dump(pca_obj, fb)
         except Exception as e:
             raise e
-        assert pca_obj.n_features_ == X.shape[1], 'Computed PCA and training data do not have same number of SNPs' 
+        pca_n_feat = pca_obj.n_features_ if hasattr(pca_obj, "n_features_") else pca_obj.n_features_in_
+        assert pca_n_feat == X.shape[1], 'Computed PCA and training data do not have same number of SNPs' 
         log.info('Projecting data...')
         X_pca = pca_obj.transform(X).compute()
         log.info('Running KMeans on projected data...')
@@ -132,7 +133,7 @@ class PCArchetypal(object):
                     raise FileNotFoundError
             else:
                 raise FileNotFoundError
-        except FileNotFoundError as fnfe:
+        except FileNotFoundError as _:
             log.info(f'{n_components}D PCA object not found. Performing PCA...')
             pca_obj = DaskIncrementalPCA(n_components=n_components, random_state=42, batch_size=batch_size)
             pca_obj.fit(X)
@@ -141,7 +142,8 @@ class PCArchetypal(object):
                     pickle.dump(pca_obj, fb)
         except Exception as e:
             raise e
-        assert pca_obj.n_features_ == X.shape[1], 'Computed PCA and training data do not have same number of SNPs'
+        pca_n_feat = pca_obj.n_features_ if hasattr(pca_obj, "n_features_") else pca_obj.n_features_in_
+        assert pca_n_feat == X.shape[1], 'Computed PCA and training data do not have same number of SNPs'
         log.info(f'Projecting data to {n_components} dimensions...')
         X_proj = pca_obj.transform(X).compute()
         if not isinstance(K, Iterable):

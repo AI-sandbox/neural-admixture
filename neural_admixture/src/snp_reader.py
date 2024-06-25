@@ -134,6 +134,8 @@ class SNPReader:
         Returns:
             da.core.Array: imputed genotype array
         """
+        na_cols = da.all(da.isnan(G), axis=0).compute()
+        G = G[:, ~na_cols]
         if da.isnan(G).any().compute():
             log.warning(f"Data contains missing values. Will perform {method}-imputation.")
             if method == "zero":
