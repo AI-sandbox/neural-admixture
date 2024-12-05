@@ -1,33 +1,49 @@
-import torch.nn as nn
-import torch.optim as optim
-
+import torch
 from . import initializations as init
 
 class Switchers(object):
     """Switcher object for several utilities
     """
     _activations = {
-        'relu': lambda x: nn.ReLU(),
-        'tanh': lambda x: nn.Tanh(),
-        'gelu': lambda x: nn.GELU()
+        'relu': lambda x: torch.nn.ReLU(),
+        'tanh': lambda x: torch.nn.Tanh(),
+        'gelu': lambda x: torch.nn.GELU()
     }
 
     _initializations = {
-        'pckmeans': lambda X, y, k, seed, path, run_name, n_comp, batch_size: init.PCKMeansInitialization.get_decoder_init(X, k, path, run_name, n_comp, seed, batch_size),
-        'pcarchetypal': lambda X, y, k, seed, path, run_name, n_comp, batch_size: init.PCArchetypal.get_decoder_init(X, k, path, run_name, n_comp, seed, batch_size),
-        'pretrained': lambda X, y, k, seed, path, run_name, n_comp, batch_size: init.PretrainedInitialization.get_decoder_init(X, k, path),
-        'supervised': lambda X, y, k, seed, path, run_name, n_comp, batch_size: init.SupervisedInitialization.get_decoder_init(X, y, k)
-    }
+        'kmeans': lambda epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
+                    learning_rate_f2, K, seed, init_path, name, n_components, data, device, 
+                    num_gpus, hidden_size, activation, master, y, supervised_loss_weight: 
+            
+            init.KMeansInitialization.get_decoder_init(epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
+                                                learning_rate_f2, K, seed, init_path, name, n_components, data, device, 
+                                                num_gpus, hidden_size, activation, master),
 
-    _optimizers = {
-        'adam': lambda params, lr: optim.Adam(params, lr),
-        'sgd': lambda params, lr: optim.SGD(params, lr),
+        'gmm': lambda epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
+                    learning_rate_f2, K, seed, init_path, name, n_components, data, device, 
+                    num_gpus, hidden_size, activation, master, y, supervised_loss_weight: 
+            
+            init.GMMInitialization.get_decoder_init(epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
+                                                learning_rate_f2, K, seed, init_path, name, n_components, data, device, 
+                                                num_gpus, hidden_size, activation, master),
+        
+        'supervised': lambda epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
+                    learning_rate_f2, K, seed, init_path, name, n_components, data, device, 
+                    num_gpus, hidden_size, activation, master, y, supervised_loss_weight: 
+            
+            init.SupervisedInitialization.get_decoder_init(epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
+                                                learning_rate_f2, K, seed, init_path, name, n_components, data, device, 
+                                                num_gpus, hidden_size, activation, master, y, supervised_loss_weight),
     }
 
     @classmethod
-    def get_switchers(cls):
+    def get_switchers(cls) -> dict[str, object]:
+        """
+        Returns:
+        - dict[str, object]: A dictionary where the keys are strings ('activations', 'initializations'),
+          and the values are the corresponding class-level attributes.
+        """
         return {
             'activations': cls._activations,
             'initializations': cls._initializations,
-            'optimizers': cls._optimizers
         }
