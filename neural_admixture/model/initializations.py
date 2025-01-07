@@ -298,7 +298,7 @@ class KMeansInitialization(object):
         X_pca, pca_obj = load_or_compute_pca(init_path, data, n_components, 1024, device, name, master, sample_fraction=1)
         te = time.time()
         if master:
-            log.info('Running PCKMeans initialization...')
+            log.info('Running KMeans initialization...')
             log.info(f'PCA initialized in {te-t0} seconds.')
             log.info('Plot rendered.')
 
