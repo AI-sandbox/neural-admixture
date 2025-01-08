@@ -11,7 +11,7 @@ def main():
     log.info(f"Neural ADMIXTURE - Version {__version__}")
     arg_list = tuple(sys.argv)
     assert len(arg_list) > 1, 'Please provide either the argument "train" or "infer" to choose running mode.'
-    
+
     # Check number of CUDA devices
     num_devices = torch.cuda.device_count()
     
@@ -22,7 +22,7 @@ def main():
             mp.spawn(train.main, args=(arg_list[2:],), nprocs=num_devices)
         else:
             # Fallback to single-device training
-            sys.exit(train.main(arg_list[2:]))
+            sys.exit(train.main(0, arg_list[2:]))
     
     if sys.argv[1] == 'infer':
         from .src import inference
