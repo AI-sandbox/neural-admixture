@@ -184,6 +184,7 @@ def ddp_setup(stage: str, rank: int) -> None:
     Returns:
         None
     """
+    # FIXME: number of gpus should be allowed as an argument
     if torch.cuda.device_count()>1:
         if stage == 'begin':
             os.environ["MASTER_ADDR"] = "localhost"

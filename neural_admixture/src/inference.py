@@ -7,11 +7,11 @@ from typing import List
 from pathlib import Path
 
 from . import utils
+from .ipca_gpu import GPUIncrementalPCA
 from .loaders import dataloader_inference
 from ..model.neural_admixture import Q_P
 from ..model.switchers import Switchers
-from ..model.IPCA_GPU import IncrementalPCAonGPU
-torch.serialization.add_safe_globals([IncrementalPCAonGPU])
+torch.serialization.add_safe_globals([GPUIncrementalPCA])
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)

@@ -1,8 +1,11 @@
+"""
+Adapted from ... # TODO: add source
+"""
 import torch
 from typing import Optional, Tuple, Union
 import numpy as np
 
-class IncrementalPCAonGPU:
+class GPUIncrementalPCA:
     """
     Incremental Principal Component Analysis with GPU Acceleration.
     
@@ -94,7 +97,7 @@ class IncrementalPCAonGPU:
             return required_memory < available_memory
         return True
 
-    def to(self, device: Union[str, torch.device]) -> 'IncrementalPCAonGPU':
+    def to(self, device: Union[str, torch.device]) -> 'GPUIncrementalPCA':
         """
         Move the model to a different device.
         
@@ -118,7 +121,7 @@ class IncrementalPCAonGPU:
         self.device = new_device
         return self
     
-    def cpu(self) -> 'IncrementalPCAonGPU':
+    def cpu(self) -> 'GPUIncrementalPCA':
         """
         Move the model to CPU device.
         
@@ -182,7 +185,7 @@ class IncrementalPCAonGPU:
 
     @torch.amp.autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu')
     def fit(self, X: Union[np.ndarray, torch.Tensor], 
-            check_input: bool = True) -> 'IncrementalPCAonGPU':
+            check_input: bool = True) -> 'GPUIncrementalPCA':
         """
         Fit the model with X using minibatches.
         """
@@ -233,7 +236,7 @@ class IncrementalPCAonGPU:
         return self
         
     @torch.amp.autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu')
-    def partial_fit(self, X: torch.Tensor, check_input: bool = True) -> 'IncrementalPCAonGPU':
+    def partial_fit(self, X: torch.Tensor, check_input: bool = True) -> 'GPUIncrementalPCA':
         """
         Incremental fit with X.
         """
