@@ -19,7 +19,6 @@ def fit_model(args: argparse.Namespace, trX: da.core.Array, device: torch.device
               tr_pops: str, master: bool) -> None:
     """Wrapper function to start training
     """
-    # UNPACK ARGUMENTS:
     (epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
     learning_rate_P2, save_dir, activation_str, hidden_size, initialization, 
     n_components, name, seed, supervised_loss_weight) = (int(args.epochs_P1), int(args.epochs_P2), int(args.batch_size_P1), 
@@ -27,17 +26,14 @@ def fit_model(args: argparse.Namespace, trX: da.core.Array, device: torch.device
                                 args.activation, int(args.hidden_size), args.initialization if not bool(args.supervised) else 'supervised', 
                                 int(args.pca_components), args.name, int(args.seed),float(args.supervised_loss_weight))
         
-    # SET SEED:
     utils.set_seed(seed)
     
-    # TRAIN MODEL:
     K = int(args.k)
     data, y = utils.initialize_data(master, trX, tr_pops)
     P, Q, model = utils.train(initialization, device, save_dir, name, K, seed, n_components, 
                     epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
                     learning_rate_P2, data, num_gpus, activation_str, hidden_size, master,
                     y, supervised_loss_weight)
-    # SAVE RESULTS:
     if master:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
         save_path = f'{save_dir}/{name}.pt'
@@ -88,6 +84,7 @@ def main(rank: int=0, argv: List[str]=[]):
     """
     # Setting up the parallel environment:
     utils.ddp_setup('begin', rank)
+    # FIXME: if parsing fails or help is requested (-h flag) with multiprocessing, the output is repeated multiple times 
     args = utils.parse_train_args(argv)
         
     if torch.cuda.is_available():
@@ -96,7 +93,8 @@ def main(rank: int=0, argv: List[str]=[]):
         device = torch.device('mps')
     else:
         device = torch.device('cpu')
-    master = str(device) == 'cuda:0' or str(device) == 'cpu'
+    master = rank == 0
+    # FIXME: num_gpus should depend on user input
     num_gpus = torch.cuda.device_count()
     
     # Useful information for user:

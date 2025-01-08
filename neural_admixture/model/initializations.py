@@ -14,10 +14,10 @@ from sklearn.mixture import GaussianMixture as GaussianMixture
 from scipy.optimize import linear_sum_assignment as linear_assignment
 
 #from models import GaussianMixture
-from .IPCA_GPU import IncrementalPCAonGPU
+from ..src.ipca_gpu import GPUIncrementalPCA
 from .neural_admixture import NeuralAdmixture
 
-torch.serialization.add_safe_globals([IncrementalPCAonGPU])
+torch.serialization.add_safe_globals([GPUIncrementalPCA])
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ def determine_device_for_tensors(data_shape: tuple, K: int, device: torch.device
         device_tensors = device if fits_in_gpu else 'cpu'
         
         if str(device) == 'cuda:0':
-            log.info(f"Tensors in {('GPU' if fits_in_gpu else 'CPU')} because there are "
+            log.info(f"Tensors stored in {('GPU' if fits_in_gpu else 'CPU')} because there are "
             f"{bytes_to_human_readable(available_gpu_memory)} available in GPU and "
             f"tensors occupy {bytes_to_human_readable(total_memory_required)}")
     else:
@@ -128,7 +128,7 @@ def load_or_compute_pca(path: Optional[str], X: np.ndarray, n_components: int, b
             if master:
                 log.info(f"Using {int(sample_fraction * num_rows)}/{num_rows} to compute PCA.")
                 
-        pca_obj = IncrementalPCAonGPU(n_components=int(n_components), batch_size=batch_size, device=device)
+        pca_obj = GPUIncrementalPCA(n_components=int(n_components), batch_size=batch_size, device=device)
         pca_obj.fit(X)
         X_pca = pca_obj.transform(X_original).cpu()
         assert pca_obj.n_features_in_ == X_original.shape[1], 'Computed PCA and training data do not have the same number of features'
