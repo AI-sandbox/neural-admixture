@@ -152,6 +152,7 @@ class SNPReader:
             da.core.Array: Imputed genotype array.
             da.core.Array: Dask array of imputed positions (1 for imputed, 0 otherwise).
         """
+        G = da.where(G == -1, np.nan, G)
         mask = da.isnan(G)
         valid_columns_mask = ~da.all(mask, axis=0).compute()
         G = G[:, valid_columns_mask]
