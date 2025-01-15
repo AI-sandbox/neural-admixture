@@ -8,7 +8,8 @@ from codetiming import Timer
 from pathlib import Path
 from sklearn.model_selection import KFold
 from typing import List
-from tqdm.auto import tqdm
+from argparse import ArgumentError, ArgumentTypeError
+
 
 from . import utils
 
@@ -79,49 +80,61 @@ def perform_cross_validation(args: argparse.Namespace, trX: da.core.Array, devic
     utils.save_cv_error_plot(cv_errs_reduced, args.save_dir)
 """
 
-def main(rank: int=0, argv: List[str]=[]):
+def main(rank: int, argv: List[str], num_gpus):
     """Training entry point
     """
-    # Setting up the parallel environment:
-    utils.ddp_setup('begin', rank)
-    # FIXME: if parsing fails or help is requested (-h flag) with multiprocessing, the output is repeated multiple times 
-    args = utils.parse_train_args(argv)
-        
-    if torch.cuda.is_available():
-        device = torch.device(f'cuda:{int(rank)}')
-    elif torch.backends.mps.is_available():
-        device = torch.device('mps')
-    else:
-        device = torch.device('cpu')
+    utils.ddp_setup('begin', rank, num_gpus)
     master = rank == 0
-    # FIXME: num_gpus should depend on user input
-    num_gpus = torch.cuda.device_count()
     
-    # Useful information for user:
-    if master:
-        utils.print_neural_admixture_banner()
-        log.info(f"There are {os.cpu_count()} CPUs and {num_gpus} GPUs available.")
-        log.info(f"Running on K = {args.k}.")
-    
-    # Start training:
-    t = Timer()
-    t.start()
-    
-    trX, tr_pops = utils.read_data(args.data_path, master, args.populations_path, args.imputation)
+    try:
+        if any(arg in argv for arg in ['-h', '--help']):
+            if master:
+                args = utils.parse_train_args(argv)
+            return
+        args = utils.parse_train_args(argv)
+        
+        if torch.cuda.is_available():
+            device = torch.device(f'cuda:{int(rank)}')
+        elif torch.backends.mps.is_available():
+            device = torch.device('mps')
+        else:
+            device = torch.device('cpu')
+        
+        if master:
+            utils.print_neural_admixture_banner()
+            log.info(f"There are {os.cpu_count()} CPUs and {num_gpus} GPUs available.")
+            log.info(f"Running on K = {args.k}.")
+        
+        # Start training:
+        t = Timer()
+        t.start()
+        
+        trX, tr_pops = utils.read_data(args.data_path, master, args.populations_path, args.imputation)
 
-    #if args.cv is not None:
-    #    perform_cross_validation(args, trX, device, num_gpus, master)   
+        #if args.cv is not None:
+        #    perform_cross_validation(args, trX, device, num_gpus, master)   
+        
+        fit_model(args, trX, device, num_gpus, tr_pops, master)
+        
+        if master:
+            log.info('Exiting...')
+            elapsed_time = t.stop()
+            log.info(f'Total elapsed time: {elapsed_time:.2f} seconds.')
+        
+        logging.shutdown()
+        utils.ddp_setup('end', rank, num_gpus)
     
-    fit_model(args, trX, device, num_gpus, tr_pops, master)
-     
-    if master:
-        log.info('Exiting...')
-        elapsed_time = t.stop()
-        log.info(f'Total elapsed time: {elapsed_time:.2f} seconds.')
-    
-    # Exit after successful execution:
-    logging.shutdown()
-    utils.ddp_setup('end', rank)
-
+    except (ArgumentError, ArgumentTypeError) as e:
+        if master:
+            log.info(f"Error parsing arguments: {str(e)}")
+        logging.shutdown()
+        utils.ddp_setup('end', rank, num_gpus)
+        
+    except Exception as e:
+        if master:
+            log.info(f"Unexpected error during argument parsing: {str(e)}")
+        logging.shutdown()
+        utils.ddp_setup('end', rank, num_gpus)        
+        
 if __name__ == '__main__':
     main(sys.argv[1:])

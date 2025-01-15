@@ -1,5 +1,5 @@
 """
-Adapted from ... # TODO: add source
+Adapted from https://github.com/AI-sandbox/HyperFast
 """
 import torch
 from typing import Optional, Tuple, Union

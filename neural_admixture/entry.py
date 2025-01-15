@@ -11,19 +11,28 @@ def main():
     log.info(f"Neural ADMIXTURE - Version {__version__}")
     arg_list = tuple(sys.argv)
     assert len(arg_list) > 1, 'Please provide either the argument "train" or "infer" to choose running mode.'
-
-    num_devices = torch.cuda.device_count()
     
+    use_multi_gpu = '--multi_gpu' in arg_list
+    num_gpus = 0
+    if '--num_gpus' in arg_list:
+        num_gpus_index = arg_list.index('--num_gpus') + 1
+        if num_gpus_index < len(arg_list):
+            num_gpus = int(arg_list[num_gpus_index])
+
+    max_devices = torch.cuda.device_count()
+    if num_gpus > max_devices:
+        log.warning(f"Requested {num_gpus} GPUs, but only {max_devices} are available. Using {max_devices} GPUs.")
+        num_gpus = max_devices
+        
     if sys.argv[1] == 'train':
         from .src import train
 
-        # FIXME: multi-gpu training should be disabled by default unless explicilty asked for by the user to avoid accidental HW hijacking
-        if num_devices > 1:
-            mp.spawn(train.main, args=(arg_list[2:],), nprocs=num_devices)
+        if num_gpus > 1 and use_multi_gpu:
+            mp.spawn(train.main, args=(arg_list[2:], num_gpus), nprocs=num_gpus)
         else:
-            sys.exit(train.main(0, arg_list[2:]))
+            sys.exit(train.main(0, arg_list[2:], num_gpus))
     
-    if sys.argv[1] == 'infer':
+    elif sys.argv[1] == 'infer':
         from .src import inference
         sys.exit(inference.main(arg_list[2:]))
     
