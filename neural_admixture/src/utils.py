@@ -52,6 +52,9 @@ def parse_train_args(argv: List[str]):
     parser.add_argument('--populations_path', required=False, default='', type=str, help='Path containing the main data populations')
     parser.add_argument('--supervised', action='store_true', default=False, help='If specified, will run the supervised version')
     
+    parser.add_argument('--multi_gpu', action='store_true', default=False, help='Execute on multi-GPU mode.')
+    parser.add_argument('--num_gpus', required=False, default=0, type=int, help='Number of GPUs to be used in the execution.')
+    
     #parser.add_argument('--cv', required=False, default=None, type=int, help='Number of folds for cross-validation')
     return parser.parse_args(argv)
 
@@ -173,7 +176,7 @@ def write_outputs(Q: np.ndarray, run_name: str, K: int, out_path: str, P: np.nda
         np.savetxt(out_path/f"{run_name}.{K}.P", P, delimiter=' ')
     return 
 
-def ddp_setup(stage: str, rank: int) -> None:
+def ddp_setup(stage: str, rank: int, num_gpus: int) -> None:
     """
     Initialize or destroy the Distributed Data Parallel (DDP) process group.
 
@@ -184,13 +187,12 @@ def ddp_setup(stage: str, rank: int) -> None:
     Returns:
         None
     """
-    # FIXME: number of gpus should be allowed as an argument
-    if torch.cuda.device_count()>1:
+    if num_gpus>1:
         if stage == 'begin':
             os.environ["MASTER_ADDR"] = "localhost"
             os.environ["MASTER_PORT"] = "12355"
             torch.cuda.set_device(rank)
-            torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=torch.cuda.device_count())
+            torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=num_gpus)
         else:
             torch.distributed.destroy_process_group()
 
