@@ -155,7 +155,8 @@ class GMMInitialization(object):
     @classmethod
     def get_decoder_init(cls, epochs_P1: int, epochs_P2: int, batch_size_P1: int, batch_size_P2: int, learning_rate_P1_P: float, 
                         learning_rate_P2: float, K: int, seed: int, init_path: Path, name: str, n_components: int, data: np.ndarray, 
-                        device: torch.device, num_gpus: int, hidden_size: int, activation: torch.nn.Module, master: bool) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+                        device: torch.device, num_gpus: int, hidden_size: int, activation: torch.nn.Module, master: bool,
+                        num_cpus: int) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Initializes P and Q matrices and trains a neural admixture model using GMM.
 
@@ -202,7 +203,7 @@ class GMMInitialization(object):
         input = X_pca.to(device_tensors)
         
         model = NeuralAdmixture(K, epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, device, seed, num_gpus,
-                                learning_rate_P1_P, learning_rate_P2, device_tensors, master)
+                                learning_rate_P1_P, learning_rate_P2, device_tensors, master, num_cpus)
         
         P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_pca.shape[1], K, activation, input, Q_init)
 
@@ -268,7 +269,8 @@ class KMeansInitialization(object):
     @classmethod
     def get_decoder_init(cls, epochs_P1: int, epochs_P2: int, batch_size_P1: int, batch_size_P2: int, learning_rate_P1_P: float, 
                         learning_rate_P2: float, K: int, seed: int, init_path: Path, name: str, n_components: int, data: np.ndarray, 
-                        device: torch.device, num_gpus: int, hidden_size: int, activation: torch.nn.Module, master: bool) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+                        device: torch.device, num_gpus: int, hidden_size: int, activation: torch.nn.Module, master: bool,
+                        num_cpus: int) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Initializes P and Q matrices and trains a neural admixture model using consensus K-Means.
 
@@ -318,7 +320,7 @@ class KMeansInitialization(object):
         input = X_pca.to(device_tensors)
         
         model = NeuralAdmixture(K, epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, device, seed, num_gpus,
-                            learning_rate_P1_P, learning_rate_P2, device_tensors, master)
+                            learning_rate_P1_P, learning_rate_P2, device_tensors, master, num_cpus)
         
         P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_pca.shape[1], K, activation, input, Q_init)
 
@@ -331,7 +333,7 @@ class SupervisedInitialization(object):
     def get_decoder_init(cls, epochs_P1: int, epochs_P2: int, batch_size_P1: int, batch_size_P2: int, learning_rate_P1_P: float, 
                         learning_rate_P2: float, K: int, seed: int, init_path: Path, name: str, n_components: int, data: np.ndarray, 
                         device: torch.device, num_gpus: int, hidden_size: int, activation: torch.nn.Module, master: bool,
-                        y: str, supervised_loss_weight: float) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+                        num_cpus: int, y: str, supervised_loss_weight: float) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         if master:
             log.info('Running Supervised initialization...')
         assert y is not None, 'Ground truth ancestries needed for supervised mode'
@@ -361,7 +363,7 @@ class SupervisedInitialization(object):
         y = torch.as_tensor(y_num, dtype=torch.int64, device=device_tensors)
 
         model = NeuralAdmixture(K, epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, device, seed, num_gpus,
-                            learning_rate_P1_P, learning_rate_P2, device_tensors, master, supervised_loss_weight)
+                            learning_rate_P1_P, learning_rate_P2, device_tensors, master, num_cpus, supervised_loss_weight)
         
         P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_pca.shape[1], K, activation, input, y=y)
        
