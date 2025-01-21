@@ -315,7 +315,7 @@ class NeuralAdmixture():
         if Q is not None: #not supervised
             self.optimizer = self.raw_model.create_custom_adam(self.lr_P1_P, phase='P1')
             self.raw_model.freeze()
-            dataloader, sampler = dataloader_P1(data, Q, self.batch_size_P1, self.num_gpus, self.seed, self.generator, self.pin, self.num_cpus)
+            dataloader = dataloader_P1(data, Q, self.batch_size_P1, self.num_gpus, self.seed, self.generator, self.pin, self.num_cpus)
             for _ in tqdm(range(self.epochs_P1), desc="Epochs"):
                 self._run_epoch_P1(dataloader)
             self.raw_model.unfreeze()
@@ -323,7 +323,7 @@ class NeuralAdmixture():
         #PHASE 2:
         data = data.float()
         self.optimizer = self.raw_model.create_custom_adam(lr_P2=self.lr_P2, phase='P2')
-        dataloader, sampler = dataloader_P2(data, input, self.batch_size_P2, self.num_gpus, self.seed, self.generator, self.pin, y, self.num_cpus)
+        dataloader = dataloader_P2(data, input, self.batch_size_P2, self.num_gpus, self.seed, self.generator, self.pin, y, self.num_cpus)
 
         run_epoch = self._run_epoch_P2_supervised if Q is None else self._run_epoch_P2
         for _ in tqdm(range(self.epochs_P2), desc="Epochs"):
