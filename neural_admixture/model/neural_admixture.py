@@ -43,7 +43,8 @@ class Q_P(torch.nn.Module):
         P (Optional[torch.Tensor], optional): The P matrix to be optimized. Defaults to None.
         
     """
-    def __init__(self, hidden_size: int, num_features: int, k: int, activation: torch.nn.Module, P: torch.Tensor=None) -> None:
+    def __init__(self, hidden_size: int, num_features: int, k: int, activation: torch.nn.Module, P: torch.Tensor=None,
+                is_train: bool=True) -> None:
         """
         Initialize the Q_P module with the given parameters.
 
@@ -69,6 +70,17 @@ class Q_P(torch.nn.Module):
             torch.nn.Linear(self.hidden_size, self.k, bias=True)
         )
         self.softmax = torch.nn.Softmax(dim=1)
+        
+        if is_train:
+            self.return_P2 = self._return_training
+        else:
+            self.return_P2 = self._return_infer
+    
+    def _return_training(self, probs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        return torch.clamp(torch.nn.functional.linear(probs, self.P), 0, 1), probs
+    
+    def _return_infer(self, probs: torch.Tensor) -> torch.Tensor:
+        return probs
      
     def forward(self, X: torch.Tensor, phase='P2', context_manager: Optional[torch.autocast] = nullcontext()) -> torch.Tensor:
         """
@@ -77,7 +89,6 @@ class Q_P(torch.nn.Module):
         Args:
             X (torch.Tensor): A tensor of input data.
             phase (str, optional): The phase of processing ('P1' or 'P2'). Defaults to 'P2'.
-            only_probs (bool, optional): If True, only the probabilities are returned. Defaults to False.
             context_manager (Optional[torch.autocast], optional): A context manager for controlling execution flow, can be used for mixed-precision training.
 
         Returns:
@@ -87,7 +98,7 @@ class Q_P(torch.nn.Module):
             X = self.batch_norm(X)
             hid_states = self.common_encoder(X)
             probs = self.softmax(hid_states)
-            return torch.clamp(torch.nn.functional.linear(probs,self.P),0,1), probs
+            return self.return_P2(probs)
         else:
             with context_manager:
                 return torch.clamp(torch.nn.functional.linear(X, self.P),0,1)

@@ -59,14 +59,14 @@ def main(argv: List[str]):
     
     switchers = Switchers.get_switchers()
     activation = switchers['activations'][config['activation']](0)
-    model = Q_P(int(config['hidden_size']), int(config['num_features']), int(config['k']), activation)
+    model = Q_P(int(config['hidden_size']), int(config['num_features']), int(config['k']), activation, is_train=False)
     model.load_state_dict(torch.load(weights_file_str, weights_only=True, map_location=device))
     model.to(device)
     log.info('Model weights loaded.')
     
     # LOAD DATA:
-    trX = utils.read_data(data_file_str, master=True)
-    data, tr_pops = utils.initialize_data(True, trX)
+    trX, _ = utils.read_data(data_file_str, master=True)
+    data, _ = utils.initialize_data(True, trX)
     
     # LOAD PCA:
     if os.path.exists(pca_file_str):
@@ -87,8 +87,8 @@ def main(argv: List[str]):
         dataloader = dataloader_inference(input, batch_size_inference_Q, seed, generator, num_gpus, pin, num_cpus)
         for input_step in dataloader:
             input_step = input_step.to(device)
-            out = model(input_step, 'P2', only_probs=True)
-            Q = torch.cat((Q, out), dim=0)
+            probs = model(input_step, 'P2')
+            Q = torch.cat((Q, probs), dim=0)
     log.info('Inference run successfully. Writing outputs...')
     
     # WRITE OUTPUTS:
