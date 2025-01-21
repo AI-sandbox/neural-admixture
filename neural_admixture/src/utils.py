@@ -11,7 +11,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 from .snp_reader import SNPReader
 from ..model.switchers import Switchers
@@ -26,12 +26,12 @@ def parse_train_args(argv: List[str]):
                                            description='Rapid population clustering with autoencoders - training mode',
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
     
-    parser.add_argument('--epochs_P1', required=False, type=int, default=50, help='Maximum number of epochs for phase 1.')
+    parser.add_argument('--epochs_P1', required=False, type=int, default=25, help='Maximum number of epochs for phase 1.')
     parser.add_argument('--epochs_P2', required=False, type=int, default=400, help='Maximum number of epochs for phase 2.')
     parser.add_argument('--batch_size_P1', required=False, default=400, type=int, help='Batch size for phase 1.')
     parser.add_argument('--batch_size_P2', required=False, default=800, type=int, help='Batch size for phase 2.')
-
-    parser.add_argument('--learning_rate_P1_P', required=False, default=4e-4, type=float, help='Learning rate for phase 1 (P).')
+    
+    parser.add_argument('--learning_rate_P1_P', required=False, default=5e-4, type=float, help='Learning rate for phase 1 (P).')
     parser.add_argument('--learning_rate_P2', required=False, default=17e-4, type=float, help='Learning rate for phase 2.')
 
     parser.add_argument('--initialization', required=False, type=str, default = 'gmm',
@@ -54,6 +54,7 @@ def parse_train_args(argv: List[str]):
     
     parser.add_argument('--multi_gpu', action='store_true', default=False, help='Execute on multi-GPU mode.')
     parser.add_argument('--num_gpus', required=False, default=0, type=int, help='Number of GPUs to be used in the execution.')
+    parser.add_argument('--num_cpus', required=False, default=1, type=int, help='Number of GPUs to be used in the execution.')
     
     #parser.add_argument('--cv', required=False, default=None, type=int, help='Number of folds for cross-validation')
     return parser.parse_args(argv)
@@ -70,6 +71,9 @@ def parse_infer_args(argv: List[str]):
     parser.add_argument('--name', required=True, type=str, help='Trained experiment/model name.')
     parser.add_argument('--batch_size', required=False, default=1000, type=int, help='Batch size.')
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
+    
+    parser.add_argument('--num_cpus', required=False, default=1, type=int, help='Number of GPUs to be used in the execution.')
+
     return parser.parse_args(argv)
 
 def read_data(tr_file: str, master: bool, tr_pops_f: str=None, imputation: str='mean') -> da.core.Array:
@@ -97,7 +101,7 @@ def read_data(tr_file: str, master: bool, tr_pops_f: str=None, imputation: str='
     
     return data, None
 
-def initialize_data(master: bool, trX: da.core.Array, tr_pops: str) -> np.ndarray:
+def initialize_data(master: bool, trX: da.core.Array, tr_pops: Union[str, None]=None) -> np.ndarray:
     """
     Initialize data.
 
@@ -117,7 +121,7 @@ def initialize_data(master: bool, trX: da.core.Array, tr_pops: str) -> np.ndarra
 def train(initialization: str, device: torch.device, save_dir : str, name: str, 
         k: int, seed: int, n_components: int, epochs_P1: str, epochs_P2: str, batch_size_P1: int, 
         batch_size_P2: int, learning_rate_P1_P: int,learning_rate_P2: int, data: np.ndarray, 
-        num_gpus: int, activation_str: str, hidden_size: int, master: bool,
+        num_gpus: int, activation_str: str, hidden_size: int, master: bool, num_cpus: int,
         y: str, supervised_loss_weight: float) -> Tuple[np.ndarray, np.ndarray, torch.nn.Module]:
     """
     Train the model using specified initialization, hyperparameters, and data.
@@ -152,7 +156,7 @@ def train(initialization: str, device: torch.device, save_dir : str, name: str,
     P, Q, model = switchers['initializations'][initialization](
         epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
         learning_rate_P2, k, seed, init_path, name, n_components, data, device, 
-        num_gpus, hidden_size, activation, master, y, supervised_loss_weight)
+        num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight)
     
     return P, Q, model
 

@@ -13,27 +13,27 @@ class Switchers(object):
     _initializations = {
         'kmeans': lambda epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
                     learning_rate_f2, K, seed, init_path, name, n_components, data, device, 
-                    num_gpus, hidden_size, activation, master, y, supervised_loss_weight: 
+                    num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight: 
             
             init.KMeansInitialization.get_decoder_init(epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
                                                 learning_rate_f2, K, seed, init_path, name, n_components, data, device, 
-                                                num_gpus, hidden_size, activation, master),
+                                                num_gpus, hidden_size, activation, master, num_cpus),
 
         'gmm': lambda epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
                     learning_rate_f2, K, seed, init_path, name, n_components, data, device, 
-                    num_gpus, hidden_size, activation, master, y, supervised_loss_weight: 
+                    num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight: 
             
             init.GMMInitialization.get_decoder_init(epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
                                                 learning_rate_f2, K, seed, init_path, name, n_components, data, device, 
-                                                num_gpus, hidden_size, activation, master),
+                                                num_gpus, hidden_size, activation, master, num_cpus),
         
         'supervised': lambda epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
                     learning_rate_f2, K, seed, init_path, name, n_components, data, device, 
-                    num_gpus, hidden_size, activation, master, y, supervised_loss_weight: 
+                    num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight: 
             
             init.SupervisedInitialization.get_decoder_init(epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
                                                 learning_rate_f2, K, seed, init_path, name, n_components, data, device, 
-                                                num_gpus, hidden_size, activation, master, y, supervised_loss_weight),
+                                                num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight),
     }
 
     @classmethod

@@ -1,12 +1,13 @@
 import torch
+import math
+
 from torch.utils.data import Dataset, DataLoader, BatchSampler
 from torch.utils.data.distributed import DistributedSampler
-import math
 from typing import Tuple, Union, List, Generator
 
-# DATALOADERS DEFINITION:
+# DATALOADERS:
 def dataloader_P1(data: torch.Tensor, Q: torch.Tensor, batch_size: int, num_gpus: int, seed: int, 
-                  generator: torch.Generator, pin: bool) -> Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]:
+                generator: torch.Generator, pin: bool, num_cpus: int) -> Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]:
     """
     Creates a DataLoader with batch sampler or distributed sampler for the phase 1.
 
@@ -31,11 +32,11 @@ def dataloader_P1(data: torch.Tensor, Q: torch.Tensor, batch_size: int, num_gpus
         dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P1, pin_memory=pin)
     else:
         sampler = BatchSampler(dataset, batch_size, generator, shuffle=True, seed=seed)
-        dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P1, num_workers=2)
+        dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P1, num_workers=max(2, min(num_cpus - 1, int(num_cpus * 0.065))))
     return dataloader, sampler
 
 def dataloader_P2(X: torch.Tensor, input: torch.Tensor, batch_size: int, num_gpus: int, seed: int, 
-                  generator: torch.Generator, pin: bool, y: torch.Tensor) -> Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]:
+                generator: torch.Generator, pin: bool, y: torch.Tensor, num_cpus: int) -> Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]:
     """
     Creates a DataLoader with batch sampler or distributed sampler for the phase 2.
 
@@ -54,15 +55,17 @@ def dataloader_P2(X: torch.Tensor, input: torch.Tensor, batch_size: int, num_gpu
     dataset = Dataset_P2(X, input, y)
     if num_gpus > 1:
         sampler = DistributedSampler(dataset, shuffle=True, seed=seed)
-        return DataLoader(dataset, batch_size=batch_size, sampler=sampler, collate_fn=collate_fn_P2, pin_memory=pin), sampler
+        dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, collate_fn=collate_fn_P2, pin_memory=pin)
     elif num_gpus == 1:
         sampler = BatchSampler(dataset, batch_size, generator, seed, shuffle=True, pad=True)
-        return DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P2, pin_memory=pin), sampler
+        dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P2, pin_memory=pin)
     else:
         sampler = BatchSampler(dataset, batch_size, generator, seed, shuffle=True, pad=True)
-        return DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P2, num_workers=2), sampler
+        dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P2, num_workers=max(2, min(num_cpus - 1, int(num_cpus * 0.065))))
+    return dataloader, sampler
 
-def dataloader_inference(input: torch.Tensor, batch_size: int, seed: int, generator: torch.Generator, num_gpus: int, pin: bool) -> DataLoader:
+def dataloader_inference(input: torch.Tensor, batch_size: int, seed: int, generator: torch.Generator, num_gpus: int, 
+                        pin: bool, num_cpus: int) -> DataLoader:
     """
     Creates a DataLoader for inference using a BatchSampler.
 
@@ -78,10 +81,11 @@ def dataloader_inference(input: torch.Tensor, batch_size: int, seed: int, genera
     dataset = Dataset_inference(input)
     if num_gpus == 1:
         sampler = BatchSampler(dataset, batch_size, generator, seed, shuffle=False, pad=False)
-        return DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_inference, pin_memory=pin)
+        dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_inference, pin_memory=pin)
     else:
         sampler = BatchSampler(dataset, batch_size, generator, seed, shuffle=False, pad=False)
-        return DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_inference, num_workers=2)
+        dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_inference, num_workers=max(2, min(num_cpus - 1, int(num_cpus * 0.065))))
+    return dataloader
     
 # F1 DATASET:
 class Dataset_P1(Dataset):

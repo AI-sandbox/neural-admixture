@@ -23,11 +23,11 @@ def main(argv: List[str]):
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
         num_gpus = 1
-        pin_non_blocking = False
+        pin = False
     else:
         device = torch.device('cpu')
         num_gpus = 0
-        pin_non_blocking = True
+        pin = True
         
     utils.print_neural_admixture_banner()
     log.info(f"There are {os.cpu_count()} CPUs and {num_gpus} GPUs available.")
@@ -43,6 +43,7 @@ def main(argv: List[str]):
     pca_file_str = f'{Path(args.save_dir) / init_file}'
     seed = int(args.seed)
     batch_size_inference_Q = int(args.batch_size)
+    num_cpus = args.num_cpus
     generator = torch.Generator().manual_seed(seed)
     
     # LOAD MODEL:
@@ -65,7 +66,7 @@ def main(argv: List[str]):
     
     # LOAD DATA:
     trX = utils.read_data(data_file_str, master=True)
-    data = utils.initialize_data(True, trX)
+    data, tr_pops = utils.initialize_data(True, trX)
     
     # LOAD PCA:
     if os.path.exists(pca_file_str):
@@ -83,7 +84,7 @@ def main(argv: List[str]):
     Q = torch.tensor([], device=device)
     
     with torch.inference_mode():
-        dataloader = dataloader_inference(input, batch_size_inference_Q, seed, generator, num_gpus, pin=pin_non_blocking)
+        dataloader = dataloader_inference(input, batch_size_inference_Q, seed, generator, num_gpus, pin, num_cpus)
         for input_step in dataloader:
             input_step = input_step.to(device)
             out = model(input_step, 'P2', only_probs=True)

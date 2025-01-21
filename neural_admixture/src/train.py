@@ -22,10 +22,10 @@ def fit_model(args: argparse.Namespace, trX: da.core.Array, device: torch.device
     """
     (epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
     learning_rate_P2, save_dir, activation_str, hidden_size, initialization, 
-    n_components, name, seed, supervised_loss_weight) = (int(args.epochs_P1), int(args.epochs_P2), int(args.batch_size_P1), 
+    n_components, name, seed, supervised_loss_weight, num_cpus) = (int(args.epochs_P1), int(args.epochs_P2), int(args.batch_size_P1), 
                                 int(args.batch_size_P2), float(args.learning_rate_P1_P), float(args.learning_rate_P2), args.save_dir, 
                                 args.activation, int(args.hidden_size), args.initialization if not bool(args.supervised) else 'supervised', 
-                                int(args.pca_components), args.name, int(args.seed),float(args.supervised_loss_weight))
+                                int(args.pca_components), args.name, int(args.seed), float(args.supervised_loss_weight), int(args.num_cpus))
         
     utils.set_seed(seed)
     
@@ -33,7 +33,7 @@ def fit_model(args: argparse.Namespace, trX: da.core.Array, device: torch.device
     data, y = utils.initialize_data(master, trX, tr_pops)
     P, Q, model = utils.train(initialization, device, save_dir, name, K, seed, n_components, 
                     epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
-                    learning_rate_P2, data, num_gpus, activation_str, hidden_size, master,
+                    learning_rate_P2, data, num_gpus, activation_str, hidden_size, master, num_cpus,
                     y, supervised_loss_weight)
     if master:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
@@ -102,7 +102,7 @@ def main(rank: int, argv: List[str], num_gpus):
         
         if master:
             utils.print_neural_admixture_banner()
-            log.info(f"There are {os.cpu_count()} CPUs and {num_gpus} GPUs available.")
+            log.info(f"There are {args.num_cpus} CPUs and {num_gpus} GPUs available for this execution.")
             log.info(f"Running on K = {args.k}.")
         
         # Start training:

@@ -191,7 +191,7 @@ class NeuralAdmixture():
     """
     def __init__(self, k: int, epochs_P1: int, epochs_P2: int, batch_size_P1: int, batch_size_P2: int, 
                  device: torch.device, seed: int, num_gpus: int, learning_rate_P1_P: float, 
-                 learning_rate_P2: float, device_tensors: torch.device, master: bool, 
+                 learning_rate_P2: float, device_tensors: torch.device, master: bool, num_cpus: int,
                  supervised_loss_weight: Optional[float]=None):
         """
         Initializes the NeuralAdmixture class with training parameters and settings.
@@ -215,9 +215,10 @@ class NeuralAdmixture():
         # Model configuration:
         self.k = k
         self.num_gpus = num_gpus
+        self.num_cpus = num_cpus
         self.device = device
         self.device_type = 'cuda' if 'cuda' in self.device.type else 'cpu'
-        self.pin_non_blocking = True if 'cpu' in device_tensors.type else False
+        self.pin = True if 'cpu' in device_tensors.type else False
         self.dtype = torch.bfloat16 if 'cuda' in self.device.type else torch.float32
         self.master = master
         
@@ -303,8 +304,8 @@ class NeuralAdmixture():
         if Q is not None: #not supervised
             self.optimizer = self.raw_model.create_custom_adam(self.lr_P1_P, phase='P1')
             self.raw_model.freeze()
+            dataloader, sampler = dataloader_P1(data, Q, self.batch_size_P1, self.num_gpus, self.seed, self.generator, self.pin, self.num_cpus)
             for epoch in tqdm(range(self.epochs_P1), desc="Epochs"):
-                dataloader, sampler = dataloader_P1(data, Q, self.batch_size_P1, self.num_gpus, self.seed, self.generator, self.pin_non_blocking)
                 self._run_epoch_P1(dataloader)
                 sampler.set_epoch(epoch)
             self.raw_model.unfreeze()
@@ -312,17 +313,12 @@ class NeuralAdmixture():
         #PHASE 2:
         data = data.float()
         self.optimizer = self.raw_model.create_custom_adam(lr_P2=self.lr_P2, phase='P2')
-                
-        if Q is not None: # not supervised
-            for epoch in tqdm(range(self.epochs_P2), desc="Epochs"):
-                dataloader, sampler = dataloader_P2(data, input, self.batch_size_P2, self.num_gpus, self.seed, self.generator, self.pin_non_blocking, y)
-                self._run_epoch_P2(dataloader)
-                sampler.set_epoch(epoch)
-        else: #supervised
-            for epoch in tqdm(range(self.epochs_P2), desc="Epochs"):
-                dataloader, sampler = dataloader_P2(data, input, self.batch_size_P2, self.num_gpus, self.seed, self.generator, self.pin_non_blocking, y)
-                self._run_epoch_P2_supervised(dataloader)
-                sampler.set_epoch(epoch)
+        dataloader, sampler = dataloader_P2(data, input, self.batch_size_P2, self.num_gpus, self.seed, self.generator, self.pin, y, self.num_cpus)
+
+        run_epoch = self._run_epoch_P2_supervised if Q is None else self._run_epoch_P2
+        for epoch in tqdm(range(self.epochs_P2), desc="Epochs"):
+            run_epoch(dataloader)
+            sampler.set_epoch(epoch)
 
         #INFERENCE OF Q's:
         batch_size_inference_Q = min(data.shape[0], 5000)
@@ -330,7 +326,7 @@ class NeuralAdmixture():
         Q = torch.tensor([], device=self.device)
         with torch.inference_mode():
             dataloader = dataloader_inference(input, batch_size_inference_Q, self.seed, self.generator, num_gpus=1 if self.num_gpus >= 1 else 0, 
-                                              pin=self.pin_non_blocking)
+                                              pin=self.pin, num_cpus=self.num_cpus)
             for input_step in dataloader:
                 input_step = input_step.to(self.device)
                 _, out = self.model(input_step, 'P2')
@@ -350,8 +346,8 @@ class NeuralAdmixture():
             dataloader (Dataloader): Dataloader of phase 1.
         """
         for batch_idx, (q_tensor_batch, target_batch) in enumerate(dataloader):
-            q_tensor_batch = q_tensor_batch.to(self.device, non_blocking=self.pin_non_blocking)
-            target_batch = target_batch.to(self.device, non_blocking=self.pin_non_blocking)
+            q_tensor_batch = q_tensor_batch.to(self.device, non_blocking=self.pin)
+            target_batch = target_batch.to(self.device, non_blocking=self.pin)
             
             if (batch_idx + 1) % self.accumulation_steps == 0 or batch_idx + 1 == self.num_batches_P1:   
                 loss = self._run_step_P1(q_tensor_batch, target_batch)
@@ -391,8 +387,8 @@ class NeuralAdmixture():
             dataloader (Dataloader): Dataloader of phase 2.
         """
         for X, input_step, _ in dataloader:
-            X = X.to(self.device, non_blocking=self.pin_non_blocking)
-            input_step = input_step.to(self.device, non_blocking=self.pin_non_blocking)
+            X = X.to(self.device, non_blocking=self.pin)
+            input_step = input_step.to(self.device, non_blocking=self.pin)
             
             loss = self._run_step_P2(X, input_step)
             loss.backward()
@@ -423,8 +419,8 @@ class NeuralAdmixture():
             dataloader (Dataloader): Dataloader of phase 2.
         """
         for X, input_step, y in dataloader:
-            X = X.to(self.device, non_blocking=self.pin_non_blocking)
-            input_step = input_step.to(self.device, non_blocking=self.pin_non_blocking)
+            X = X.to(self.device, non_blocking=self.pin)
+            input_step = input_step.to(self.device, non_blocking=self.pin)
             
             loss = self._run_step_P2_supervised(X, input_step, y)
             loss.backward()
