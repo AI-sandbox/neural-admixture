@@ -33,7 +33,7 @@ def dataloader_P1(data: torch.Tensor, Q: torch.Tensor, batch_size: int, num_gpus
     else:
         sampler = BatchSampler(dataset, batch_size, generator, shuffle=True, seed=seed)
         dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P1, num_workers=max(2, min(num_cpus - 1, int(num_cpus * 0.065))))
-    return dataloader, sampler
+    return dataloader
 
 def dataloader_P2(X: torch.Tensor, input: torch.Tensor, batch_size: int, num_gpus: int, seed: int, 
                 generator: torch.Generator, pin: bool, y: torch.Tensor, num_cpus: int) -> Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]:
@@ -62,7 +62,7 @@ def dataloader_P2(X: torch.Tensor, input: torch.Tensor, batch_size: int, num_gpu
     else:
         sampler = BatchSampler(dataset, batch_size, generator, seed, shuffle=True, pad=True)
         dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P2, num_workers=max(2, min(num_cpus - 1, int(num_cpus * 0.065))))
-    return dataloader, sampler
+    return dataloader
 
 def dataloader_inference(input: torch.Tensor, batch_size: int, seed: int, generator: torch.Generator, num_gpus: int, 
                         pin: bool, num_cpus: int) -> DataLoader:
@@ -276,14 +276,11 @@ class BatchSampler(BatchSampler):
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.seed = seed
-        self.epoch = 0
         self.num_samples = len(self.dataset)
-        self.total_size = self.num_samples
         self.num_batches = math.ceil(self.num_samples / self.batch_size)
         padding_size = self.num_batches * self.batch_size - self.num_samples
         self.total_size = self.num_samples + padding_size
         self.generator = generator
-        self.epoch = 0
         self.pad = pad
 
     def __iter__(self) -> Generator[list[int], None, None]:
@@ -292,7 +289,7 @@ class BatchSampler(BatchSampler):
             Generator[list[int], None, None]: A generator that yields batches of indices.
         """
         if self.shuffle:
-            self.generator.manual_seed(self.seed + self.epoch)
+            self.generator.manual_seed(self.seed)
             indices = torch.randperm(len(self.dataset), generator=self.generator).tolist()
         else:
             indices = list(range(len(self.dataset)))
@@ -318,12 +315,3 @@ class BatchSampler(BatchSampler):
             int: The number of batches in the sampler.
         """
         return self.num_batches
-
-    def set_epoch(self, epoch: int) -> None:
-        """
-        Set the current epoch number for the sampler.
-
-        Args:
-            epoch (int): The current epoch number.
-        """
-        self.epoch = epoch
