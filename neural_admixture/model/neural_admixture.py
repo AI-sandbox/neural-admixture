@@ -133,7 +133,7 @@ class Q_P(torch.nn.Module):
             {'params': self.common_encoder.parameters(), 'lr': lr_P2},
             {'params': self.batch_norm.parameters(), 'lr': lr_P2}
                 ]
-        return torch.optim.Adam(p, betas=[0.9, 0.95])
+        return torch.optim.Adam(p, betas=[0.9, 0.95], fused=True)
     
     def freeze(self) -> None:
         """

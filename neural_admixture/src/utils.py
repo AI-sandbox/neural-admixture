@@ -26,12 +26,12 @@ def parse_train_args(argv: List[str]):
                                            description='Rapid population clustering with autoencoders - training mode',
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
     
-    parser.add_argument('--epochs_P1', required=False, type=int, default=25, help='Maximum number of epochs for phase 1.')
-    parser.add_argument('--epochs_P2', required=False, type=int, default=400, help='Maximum number of epochs for phase 2.')
+    parser.add_argument('--epochs_P1', required=False, type=int, default=50, help='Maximum number of epochs for phase 1.')
+    parser.add_argument('--epochs_P2', required=False, type=int, default=500, help='Maximum number of epochs for phase 2.')
     parser.add_argument('--batch_size_P1', required=False, default=400, type=int, help='Batch size for phase 1.')
     parser.add_argument('--batch_size_P2', required=False, default=800, type=int, help='Batch size for phase 2.')
     
-    parser.add_argument('--learning_rate_P1_P', required=False, default=5e-4, type=float, help='Learning rate for phase 1 (P).')
+    parser.add_argument('--learning_rate_P1_P', required=False, default=4e-4, type=float, help='Learning rate for phase 1 (P).')
     parser.add_argument('--learning_rate_P2', required=False, default=17e-4, type=float, help='Learning rate for phase 2.')
 
     parser.add_argument('--initialization', required=False, type=str, default = 'gmm',
