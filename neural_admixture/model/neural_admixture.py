@@ -241,7 +241,7 @@ class NeuralAdmixture():
         self.generator = torch.Generator().manual_seed(self.seed)
         
         # Accumulation steps for gradient scaling (if GPUs are used):
-        self.accumulation_steps = 4 / self.num_gpus if self.num_gpus>0 else 4
+        self.accumulation_steps = 8 / self.num_gpus if self.num_gpus>0 else 8
         
         # Training configuration:
         self.epochs_P1 = epochs_P1
