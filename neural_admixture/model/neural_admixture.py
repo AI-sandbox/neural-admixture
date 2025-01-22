@@ -61,7 +61,7 @@ class Q_P(torch.nn.Module):
             self.P = torch.nn.Parameter(P)
         
         self.num_features = num_features
-        self.batch_norm = torch.nn.BatchNorm1d(self.num_features)
+        self.batch_norm = torch.nn.RMSNorm(self.num_features, eps=1e-8)
         self.encoder_activation = activation
         self.hidden_size = hidden_size
         self.common_encoder = torch.nn.Sequential(
@@ -275,8 +275,7 @@ class NeuralAdmixture():
         """
         self.base_model = Q_P(hidden_size, num_features, k, activation, p_tensor).to(self.device)
         if self.num_gpus > 1 and torch.distributed.is_initialized():
-            base_model_s = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.base_model)
-            self.model = torch.nn.parallel.DistributedDataParallel(base_model_s, device_ids=[self.device], 
+            self.model = torch.nn.parallel.DistributedDataParallel(self.base_model, device_ids=[self.device], 
                                                                 output_device=[self.device], find_unused_parameters=True)
             self.raw_model = self.model.module
         else:
