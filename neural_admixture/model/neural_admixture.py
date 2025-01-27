@@ -75,6 +75,8 @@ class Q_P(torch.nn.Module):
             self.return_P2 = self._return_training
         else:
             self.return_P2 = self._return_infer
+            
+        self.dummy_param = torch.nn.Parameter(torch.zeros(1)) #remove find_unused_parameters warning in multi-gpu.
     
     def _return_training(self, probs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         return torch.clamp(torch.nn.functional.linear(probs, self.P), 0, 1), probs
