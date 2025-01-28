@@ -5,7 +5,7 @@ class Switchers(object):
     """Switcher object for several utilities
     """
     _activations = {
-        'relu': lambda x: torch.nn.ReLU(),
+        'relu': lambda x: torch.nn.ReLU(inplace=True),
         'tanh': lambda x: torch.nn.Tanh(),
         'gelu': lambda x: torch.nn.GELU()
     }
