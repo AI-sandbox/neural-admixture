@@ -307,6 +307,8 @@ class NeuralAdmixture():
             Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]: Processed P, Q matrices and the raw model.
         """ 
         torch.set_float32_matmul_precision('medium')
+        torch.set_flush_denormal(True)
+        
         self.initialize_model(P, hidden_size, num_features, k, activation, data.shape[0])
         
         if y is None:
