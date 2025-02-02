@@ -9,6 +9,7 @@ from pathlib import Path
 from sklearn.model_selection import KFold
 from typing import List
 from argparse import ArgumentError, ArgumentTypeError
+from pathlib import Path
 
 
 from . import utils
@@ -104,6 +105,7 @@ def main(rank: int, argv: List[str], num_gpus):
             utils.print_neural_admixture_banner()
             log.info(f"There are {args.num_cpus} CPUs and {num_gpus} GPUs available for this execution.")
             log.info(f"Running on K = {args.k}.")
+            Path(args.save_dir).mkdir(parents=True, exist_ok=True)
         
         # Start training:
         t = Timer()
@@ -126,15 +128,19 @@ def main(rank: int, argv: List[str], num_gpus):
     
     except (ArgumentError, ArgumentTypeError) as e:
         if master:
-            log.info(f"Error parsing arguments: {str(e)}")
+            log.error(f"Error parsing arguments")
         logging.shutdown()
         utils.ddp_setup('end', rank, num_gpus)
+        if master:
+            raise e
         
     except Exception as e:
         if master:
-            log.info(f"Unexpected error during argument parsing: {str(e)}")
+            log.error(f"Unexpected error")
         logging.shutdown()
         utils.ddp_setup('end', rank, num_gpus)        
+        if master:
+            raise e
         
 if __name__ == '__main__':
     main(sys.argv[1:])
