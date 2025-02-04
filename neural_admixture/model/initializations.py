@@ -64,7 +64,7 @@ def determine_device_for_tensors(data_shape: tuple, K: int, device: torch.device
         device_tensors = device if fits_in_gpu else 'cpu'
         
         if str(device) == 'cuda:0':
-            log.info(f"Tensors stored in {('GPU' if fits_in_gpu else 'CPU')} because there are "
+            log.info(f"    Tensors stored in {('GPU' if fits_in_gpu else 'CPU')} because there are "
             f"{bytes_to_human_readable(available_gpu_memory)} available in GPU and "
             f"tensors occupy {bytes_to_human_readable(total_memory_required)}")
     else:
@@ -112,9 +112,9 @@ def load_or_compute_pca(path: Optional[str], X: np.ndarray, n_components: int, b
             pca_obj = torch.load(path, weights_only=True, map_location=device)
             pca_obj.to(device)
             if master:
-                log.info('       PCA loaded.')
+                log.info("            PCA loaded.")
             X_pca = pca_obj.transform(X).cpu()
-            assert pca_obj.n_features_in_ == X_original.shape[1], 'Computed PCA and training data do not have the same number of features'
+            assert pca_obj.n_features_in_ == X_original.shape[1], "Computed PCA and training data do not have the same number of features"
         else:
             raise FileNotFoundError
         
@@ -126,25 +126,25 @@ def load_or_compute_pca(path: Optional[str], X: np.ndarray, n_components: int, b
             sampled_indices = np.sort(sampled_indices)
             X = X[sampled_indices, :]
             if master:
-                log.info(f"Using {int(sample_fraction * num_rows)}/{num_rows} to compute PCA.")
+                log.info(f"    Using {int(sample_fraction * num_rows)}/{num_rows} to compute PCA.")
                 
         pca_obj = GPUIncrementalPCA(n_components=int(n_components), batch_size=batch_size, device=device)
         pca_obj.fit(X)
         X_pca = pca_obj.transform(X_original).cpu()
-        assert pca_obj.n_features_in_ == X_original.shape[1], 'Computed PCA and training data do not have the same number of features'
+        assert pca_obj.n_features_in_ == X_original.shape[1], "Computed PCA and training data do not have the same number of features"
 
         if path is not None:
             torch.save(pca_obj.cpu(), path)
         if master:
-            log.info(f"       {n_components}D PCA object not found. Performing IncrementalPCA...")
+            log.info(f"           {n_components}D PCA object not found. Performing IncrementalPCA...")
             
     try:
         if path is not None:
             plot_save_path = Path(path).parent / f"{run_name}_training_pca.png"
             pca_plot(X_pca, plot_save_path)
     except Exception as e:
-        log.warning(f'Could not render PCA plot: {e}')
-        log.info('Resuming...')
+        log.warning(f"    Could not render PCA plot: {e}")
+        log.info("    Resuming...")
     
     return X_pca, pca_obj
 
@@ -179,13 +179,13 @@ class GMMInitialization(object):
             Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]: Initialized P matrix, Q matrix, and trained model.
         """
         if master:
-            log.info('Running Gaussian Mixture initialization...')
+            log.info("    Running Gaussian Mixture initialization...")
             log.info("")
         t0 = time.time()
         X_pca, pca_obj = load_or_compute_pca(init_path, data, n_components, 1024, device, name, master, sample_fraction=1)
         te = time.time()
         if master:
-            log.info(f'       PCA initialized in {te-t0:.3f} seconds.')
+            log.info(f"            PCA initialized in {te-t0:.3f} seconds.")
             log.info("")
 
         gmm = GaussianMixture(n_components=K, n_init=3, init_params='k-means++', tol=1e-4, covariance_type='full')
@@ -289,13 +289,13 @@ class KMeansInitialization(object):
             Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]: Initialized P matrix, Q matrix, and trained model.
         """
         if master:
-            log.info('Running KMeans initialization...')
+            log.info("    Running KMeans initialization...")
             log.info("")
         t0 = time.time()
         X_pca, pca_obj = load_or_compute_pca(init_path, data, n_components, 1024, device, name, master, sample_fraction=1)
         te = time.time()
         if master:
-            log.info(f'       PCA initialized in {te-t0} seconds.')
+            log.info(f'           PCA initialized in {te-t0} seconds.')
             log.info("")
 
         n_runs = 10 
@@ -325,14 +325,13 @@ class SupervisedInitialization(object):
                         name: str, n_components: int, data: np.ndarray, device: torch.device, num_gpus: int, hidden_size: int, 
                         activation: torch.nn.Module, master: bool, num_cpus: int, y: str, supervised_loss_weight: float) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         if master:
-            log.info('Running Supervised initialization...')
+            log.info("    Running Supervised initialization...")
         assert y is not None, 'Ground truth ancestries needed for supervised mode'
         t0 = time.time()
-        X_pca, pca_obj = load_or_compute_pca(init_path, data, n_components, 1024, device, name, master, sample_fraction=1)
+        X_pca, _ = load_or_compute_pca(init_path, data, n_components, 1024, device, name, master, sample_fraction=1)
         te = time.time()
         if master:
-            log.info(f'PCA initialized in {te-t0} seconds.')
-            log.info('Plot rendered.')
+            log.info(f"            PCA initialized in {te-t0} seconds.")
 
         ancestry_dict = {anc: idx for idx, anc in enumerate(sorted(np.unique([a for a in y if a != '-'])))}
         assert len(ancestry_dict) == K, f'Number of ancestries in training ground truth ({len(ancestry_dict)}) is not equal to the value of K ({K})'

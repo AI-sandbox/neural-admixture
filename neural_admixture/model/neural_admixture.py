@@ -146,7 +146,7 @@ class Q_P(torch.nn.Module):
         
         with open(Path(save_dir)/f"{name}_config.json", 'w') as fb:
             json.dump(_config, fb)
-        log.info('Configuration file saved.')
+        log.info("    Configuration file saved.")
         return
 
 class NeuralAdmixture():
@@ -265,7 +265,7 @@ class NeuralAdmixture():
         #TRAINING:
         if self.master:
             log.info("")
-            log.info("Starting training...")
+            log.info("    Starting training...")
             log.info("")
         self.optimizer = self.raw_model.create_custom_adam(self.lr)
         dataloader = dataloader_train(data, input, self.batch_size, self.num_gpus, self.seed, self.generator, self.pin, y, self.num_cpus)
@@ -288,7 +288,7 @@ class NeuralAdmixture():
 
         if self.master:
             log.info("")
-            log.info("Training finished!")
+            log.info("    Training finished!")
             log.info("")
             
         #RETURN OUTPUT:
@@ -313,8 +313,9 @@ class NeuralAdmixture():
             self.raw_model.restrict_P()
             
             loss_acc += loss.item()
-        if epoch % 25 == 0:
-            log.info(f"        Loss in epoch {epoch:3d} on device {self.device} is {loss_acc:.0f}.")
+        
+        if epoch%25==0:
+            log.info(f"            Loss in epoch {epoch:3d} on device {self.device} is {loss_acc:,.0f}")
         
     def _run_step(self, X: torch.Tensor,  input_step: torch.Tensor) -> torch.Tensor:
         """
@@ -339,6 +340,7 @@ class NeuralAdmixture():
         Args:
             dataloader (Dataloader): Dataloader of phase 2.
         """
+        loss_acc = 0
         for X, input_step, y in dataloader:
             X = X.to(self.device, non_blocking=self.pin)
             input_step = input_step.to(self.device, non_blocking=self.pin)
@@ -347,6 +349,11 @@ class NeuralAdmixture():
             loss.backward()
             self.optimizer.step()
             self.raw_model.restrict_P()
+            
+            loss_acc += loss.item()
+        
+        if epoch%25==0:
+            log.info(f"            Loss in epoch {epoch:3d} on device {self.device} is {int(loss_acc):,.0f}")
             
     def _run_step_supervised(self, X: torch.Tensor,  input_step: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
@@ -381,13 +388,13 @@ class NeuralAdmixture():
             dec = self.raw_model.P.data.detach().to('cpu')
             header = '\t'.join([f'Pop{p}' for p in range(k - 1)])
             
-            log.info("Results:")
-            log.info(f'\n        Fst divergences between estimated populations: (K = {k})')
-            log.info(f'        \t{header}')
-            log.info('        Pop0')
+            log.info("    Results:")
+            log.info(f'\n            Fst divergences between estimated populations: (K = {k})')
+            log.info(f'                \t{header}')
+            log.info('            Pop0')
             
             for j in range(1, k):
-                output = f'        Pop{j}'
+                output = f'            Pop{j}'
                 pop2 = dec[:, j]
                 
                 for l in range(j):
@@ -414,7 +421,7 @@ class NeuralAdmixture():
         Details:
             - Computes and logs the log-likelihood of the model given the data.
         """
-        self._loglikelihood(Q.cpu(), self.raw_model.P.data.detach().cpu().T, data.cpu(), self.device, self.master)
+        self._loglikelihood(Q.cpu(), self.raw_model.P.data.detach().cpu().T, data.cpu(), self.master)
         
         return self.raw_model.P.data.detach().cpu().numpy(), Q.cpu().numpy(), self.raw_model
     
@@ -439,11 +446,11 @@ class NeuralAdmixture():
             den = torch.mean(pop1 * (1 - pop2) + pop2 * (1 - pop1)) + 1e-7
             return (num / den).item()
         except Exception as e:
-            log.info(f"Error computing Hudson's Fst: {e}")
+            log.info(f"            Error computing Hudson's Fst: {e}")
             return float('nan')
         
     @staticmethod
-    def _loglikelihood(Q: torch.Tensor, P: torch.Tensor, data: torch.Tensor, device: torch.device, 
+    def _loglikelihood(Q: torch.Tensor, P: torch.Tensor, data: torch.Tensor,
                       master: bool, eps: float = 1e-7, reduction: str = "sum") -> None:
         """Compute deviance for a single K using PyTorch tensors
 
@@ -468,9 +475,7 @@ class NeuralAdmixture():
                 result = torch.sum(loglikelihood)
             elif reduction == "mean":
                 result = torch.mean(loglikelihood)
-            else:
-                raise ValueError("Unknown reduction")
             
-            log.info(f"        Log likelihood: {result.item()}")
+            log.info(f"            Log likelihood: {result.item():,.0f}")
             log.info("\n")
             return
