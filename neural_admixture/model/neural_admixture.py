@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Callable, Optional, Tuple
 from tqdm.auto import tqdm
 
-from ..src.loaders import dataloader_P1, dataloader_P2, dataloader_inference
+from ..src.loaders import dataloader_train, dataloader_inference
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
 def compile_if_cuda(func: Callable) -> Callable:
@@ -72,38 +72,30 @@ class Q_P(torch.nn.Module):
         self.softmax = torch.nn.Softmax(dim=1)
         
         if is_train:
-            self.return_P2 = self._return_training
+            self.return_func = self._return_training
         else:
-            self.return_P2 = self._return_infer
-            
-        self.dummy_param = torch.nn.Parameter(torch.zeros(1)) #remove find_unused_parameters warning in multi-gpu.
-    
+            self.return_func = self._return_infer
+                
     def _return_training(self, probs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         return torch.clamp(torch.nn.functional.linear(probs, self.P), 0, 1), probs
     
     def _return_infer(self, probs: torch.Tensor) -> torch.Tensor:
         return probs
      
-    def forward(self, X: torch.Tensor, phase='P2', context_manager: Optional[torch.autocast] = nullcontext()) -> torch.Tensor:
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
         """
         Perform a forward pass with the given batch of input data.
 
         Args:
             X (torch.Tensor): A tensor of input data.
-            phase (str, optional): The phase of processing ('P1' or 'P2'). Defaults to 'P2'.
-            context_manager (Optional[torch.autocast], optional): A context manager for controlling execution flow, can be used for mixed-precision training.
 
         Returns:
             torch.Tensor: The result of the forward pass, which is either probabilities or a transformed tensor clamped between 0 and 1.
         """
-        if phase == 'P2':
-            X = self.batch_norm(X)
-            hid_states = self.common_encoder(X)
-            probs = self.softmax(hid_states)
-            return self.return_P2(probs)
-        else:
-            with context_manager:
-                return torch.clamp(torch.nn.functional.linear(X, self.P),0,1)
+        X = self.batch_norm(X)
+        hid_states = self.common_encoder(X)
+        probs = self.softmax(hid_states)
+        return self.return_func(probs)
 
     @torch.no_grad()
     @compile_if_cuda
@@ -113,51 +105,23 @@ class Q_P(torch.nn.Module):
         """
         self.P.clamp_(0., 1.)
     
-    def create_custom_adam(self, lr_P1_P: float=3e-4, lr_P2: float=1e-5, phase='P1') -> torch.optim.Adam:
+    def create_custom_adam(self, lr: float=1e-5) -> torch.optim.Adam:
         """
         Creates a custom Adam optimizer with different learning rates for different phases.
 
         Args:
-            lr_P1_P (float, optional): Learning rate for phase 1 for the P parameters. Defaults to 3e-4.
-            lr_P2 (float, optional): Learning rate for phase 2. Defaults to 1e-5.
-            phase (str, optional): The current phase of training. Can be 'P1' or 'P2'. Defaults to 'P1'.
+            lr (float): Learning rate for all parameters.
 
         Returns:
             optim.Adam: The Adam optimizer configured with the specified learning rates.
         """
-        if phase == 'P1':
-            p = [
-                {'params': self.P, 'lr': lr_P1_P},
-                ]
-        else:
-            p = [
-            {'params': self.P, 'lr': lr_P2},
-            {'params': self.common_encoder.parameters(), 'lr': lr_P2},
-            {'params': self.batch_norm.parameters(), 'lr': lr_P2}
-                ]
+        p = [
+        {'params': self.P, 'lr': lr},
+        {'params': self.common_encoder.parameters(), 'lr': lr},
+        {'params': self.batch_norm.parameters(), 'lr': lr}
+            ]
         return torch.optim.Adam(p, betas=[0.9, 0.95], fused=True)
     
-    def freeze(self) -> None:
-        """
-        Freezes the parameters of the common encoder and batch normalization layers
-        by setting their `requires_grad` to False, which prevents them from being updated during training.
-        """
-        for param in self.common_encoder.parameters():
-            param.requires_grad = False
-        for param in self.batch_norm.parameters():
-            param.requires_grad = False
-        return
-    
-    def unfreeze(self) -> None:
-        """
-        Unfreezes the parameters of the common encoder and batch normalization layers
-        by setting their `requires_grad` to True, allowing them to be updated during training.
-        """
-        for param in self.common_encoder.parameters():
-            param.requires_grad = True
-        for param in self.batch_norm.parameters():
-            param.requires_grad = True
-        return
     
     def save_config(self, name: str, save_dir: str) -> None:
         """
@@ -191,35 +155,27 @@ class NeuralAdmixture():
     
     Args:
             k (int): Number of components for clustering.
-            epochs_P1 (int): Number of epochs for phase 1.
-            epochs_P2 (int): Number of epochs for phase 2.
-            batch_size_P1 (int): Batch size for phase 1.
-            batch_size_P2 (int): Batch size for phase 2.
+            epochs (int): Number of epochs.
+            batch_size (int): Batch size.
+            learning_rate (float): Learning rate.
             device (torch.device): Device for computation (e.g., 'cuda' or 'cpu').
             seed (int): Random seed for reproducibility.
             num_gpus (int): Number of GPUs available for training.
-            learning_rate_P1_P (float): Learning rate for P in phase 1.
-            learning_rate_P2 (float): Learning rate for all parameters in phase 2.
             device_tensors (torch.device): Device for tensor data.
     """
-    def __init__(self, k: int, epochs_P1: int, epochs_P2: int, batch_size_P1: int, batch_size_P2: int, 
-                 device: torch.device, seed: int, num_gpus: int, learning_rate_P1_P: float, 
-                 learning_rate_P2: float, device_tensors: torch.device, master: bool, num_cpus: int,
-                 supervised_loss_weight: Optional[float]=None):
+    def __init__(self, k: int, epochs: int, batch_size: int, learning_rate: float, device: torch.device, seed: int, num_gpus: int,
+                device_tensors: torch.device, master: bool, num_cpus: int, supervised_loss_weight: Optional[float]=None):
         """
         Initializes the NeuralAdmixture class with training parameters and settings.
 
         Args:
             k (int): Number of components for clustering.
-            epochs_P1 (int): Number of epochs for phase 1.
-            epochs_P2 (int): Number of epochs for phase 2.
-            batch_size_P1 (int): Batch size for phase 1.
-            batch_size_P2 (int): Batch size for phase 2.
+            epochs (int): Number of epochs.
+            batch_size (int): Batch size.
+            learning_rate (float): Learning rate for all parameters.
             device (torch.device): Device for computation (e.g., 'cuda' or 'cpu').
             seed (int): Random seed for reproducibility.
             num_gpus (int): Number of GPUs available for training.
-            learning_rate_P1_P (float): Learning rate for P in phase 1.
-            learning_rate_P2 (float): Learning rate for all parameters in phase 2.
             device_tensors (torch.device): Device for tensor data.
             master (bool): Wheter or not this process is the master for printing the output.
         """
@@ -246,14 +202,10 @@ class NeuralAdmixture():
         self.accumulation_steps = 8 / self.num_gpus if self.num_gpus>0 else 8
         
         # Training configuration:
-        self.epochs_P1 = epochs_P1
-        self.epochs_P2 = epochs_P2
-        self.batch_size_P1 = batch_size_P1//self.num_gpus if self.num_gpus>0 else batch_size_P1
-        self.batch_size_P2 = batch_size_P2//self.num_gpus if self.num_gpus>0 else batch_size_P2
-        self.loss_function_P1 = torch.nn.BCELoss(reduction='mean')
-        self.loss_function_P2 = torch.nn.BCELoss(reduction='sum')
-        self.lr_P1_P = learning_rate_P1_P
-        self.lr_P2 = learning_rate_P2
+        self.epochs = epochs
+        self.batch_size = batch_size//self.num_gpus if self.num_gpus>0 else batch_size
+        self.loss_function = torch.nn.BCELoss(reduction='sum')
+        self.lr = learning_rate
         
         # Supervised version:
         self.supervised_loss_weight = supervised_loss_weight
@@ -278,17 +230,14 @@ class NeuralAdmixture():
         self.base_model = Q_P(hidden_size, num_features, k, activation, p_tensor).to(self.device)
         if self.num_gpus > 1 and torch.distributed.is_initialized():
             self.model = torch.nn.parallel.DistributedDataParallel(self.base_model, device_ids=[self.device], 
-                                                                output_device=[self.device], find_unused_parameters=True)
+                                                                output_device=[self.device], find_unused_parameters=False)
             self.raw_model = self.model.module
         else:
             self.model = self.base_model
             self.raw_model = self.base_model
-        
-        self.num_batches_P1 = num_total_elements // (self.batch_size_P1)
-        self.num_batches_P2 = num_total_elements // (self.batch_size_P2)
-        
+                
     def launch_training(self, P: torch.Tensor, data: torch.Tensor, hidden_size:int, num_features:int, 
-                        k:int, activation: torch.nn.Module, input: torch.Tensor, Q: Optional[torch.Tensor]=None, 
+                        k:int, activation: torch.nn.Module, input: torch.Tensor,
                         y: Optional[torch.Tensor]=None) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Launches the training process, which includes two distinct phases and the inference step to compute Q.
@@ -306,31 +255,25 @@ class NeuralAdmixture():
         Returns:
             Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]: Processed P, Q matrices and the raw model.
         """ 
+        #SETUP:
         torch.set_float32_matmul_precision('medium')
         torch.set_flush_denormal(True)
-        
         self.initialize_model(P, hidden_size, num_features, k, activation, data.shape[0])
-        
         if y is None:
             y = torch.zeros(data.size(0))
-        
-        #PHASE 1:
-        if Q is not None: #not supervised
-            self.optimizer = self.raw_model.create_custom_adam(self.lr_P1_P, phase='P1')
-            self.raw_model.freeze()
-            dataloader = dataloader_P1(data, Q, self.batch_size_P1, self.num_gpus, self.seed, self.generator, self.pin, self.num_cpus)
-            for _ in tqdm(range(self.epochs_P1), desc="Epochs"):
-                self._run_epoch_P1(dataloader)
-            self.raw_model.unfreeze()
-                                
-        #PHASE 2:
-        data = data.float()
-        self.optimizer = self.raw_model.create_custom_adam(lr_P2=self.lr_P2, phase='P2')
-        dataloader = dataloader_P2(data, input, self.batch_size_P2, self.num_gpus, self.seed, self.generator, self.pin, y, self.num_cpus)
-
-        run_epoch = self._run_epoch_P2_supervised if Q is None else self._run_epoch_P2
-        for _ in tqdm(range(self.epochs_P2), desc="Epochs"):
-            run_epoch(dataloader)
+            run_epoch = self._run_epoch
+        else:
+            run_epoch = self._run_epoch_supervised
+            
+        #TRAINING:
+        if self.master:
+            log.info("")
+            log.info("Starting training...")
+            log.info("")
+        self.optimizer = self.raw_model.create_custom_adam(self.lr)
+        dataloader = dataloader_train(data, input, self.batch_size, self.num_gpus, self.seed, self.generator, self.pin, y, self.num_cpus)
+        for epoch in tqdm(range(self.epochs), desc="Epochs", file=sys.stderr):
+            run_epoch(epoch, dataloader)
 
         #INFERENCE OF Q's:
         batch_size_inference_Q = min(data.shape[0], 5000)
@@ -341,73 +284,42 @@ class NeuralAdmixture():
                                               pin=self.pin, num_cpus=self.num_cpus)
             for input_step in dataloader:
                 input_step = input_step.to(self.device)
-                _, out = self.model(input_step, 'P2')
+                _, out = self.model(input_step)
                 Q = torch.cat((Q, out), dim=0)
         if self.num_gpus>1:
             torch.distributed.broadcast(Q, src=0)
 
-        #RETURN OUTPUT
+        if self.master:
+            log.info("")
+            log.info("Training finished!")
+            log.info("")
+            
+        #RETURN OUTPUT:
         self.display_divergences(self.k)
         return self.process_results(data, Q)
 
-    def _run_epoch_P1(self, dataloader: torch.utils.data.DataLoader):
-        """
-        Executes one epoch of training for Phase 1.
-        
-        Args:
-            dataloader (Dataloader): Dataloader of phase 1.
-        """
-        for batch_idx, (q_tensor_batch, target_batch) in enumerate(dataloader):
-            q_tensor_batch = q_tensor_batch.to(self.device, non_blocking=self.pin)
-            target_batch = target_batch.to(self.device, non_blocking=self.pin)
-            
-            if (batch_idx + 1) % self.accumulation_steps == 0 or batch_idx + 1 == self.num_batches_P1:   
-                loss = self._run_step_P1(q_tensor_batch, target_batch)
-                loss.backward()
-                self.optimizer.step()
-                self.optimizer.zero_grad(set_to_none=True)  
-                self.raw_model.restrict_P()
-            else:
-                if self.num_gpus > 1:
-                    with self.model.no_sync():
-                        loss = self._run_step_P1(q_tensor_batch, target_batch)
-                        loss.backward()
-                else:
-                    loss = self._run_step_P1(q_tensor_batch, target_batch)
-                    loss.backward()
-                    
-    def _run_step_P1(self, q_tensor_batch: torch.Tensor, target_batch: torch.Tensor) -> torch.Tensor:
-        """
-        Executes one training step for Phase 1.
-
-        Args:
-            q_tensor_batch (torch.Tensor): Batch of Q tensor.
-            target_batch (torch.Tensor): Corresponding targets for the batch.
-
-        Returns:
-            torch.Tensor: Computed loss for the batch.
-        """
-        loss = self.loss_function_P1(self.model(q_tensor_batch, 'P1', self.context_manager), target_batch)
-        loss = loss/self.accumulation_steps
-        return loss
-
-    def _run_epoch_P2(self, dataloader: torch.utils.data.DataLoader):
+    def _run_epoch(self, epoch, dataloader: torch.utils.data.DataLoader):
         """
         Executes one epoch of training for Phase 2.
         
         Args:
             dataloader (Dataloader): Dataloader of phase 2.
         """
+        loss_acc = 0
         for X, input_step, _ in dataloader:
             X = X.to(self.device, non_blocking=self.pin)
             input_step = input_step.to(self.device, non_blocking=self.pin)
             
-            loss = self._run_step_P2(X, input_step)
+            loss = self._run_step(X, input_step)
             loss.backward()
             self.optimizer.step()
             self.raw_model.restrict_P()
+            
+            loss_acc += loss.item()
+        if epoch % 25 == 0:
+            log.info(f"        Loss in epoch {epoch:3d} on device {self.device} is {loss_acc:.0f}.")
         
-    def _run_step_P2(self, X: torch.Tensor,  input_step: torch.Tensor) -> torch.Tensor:
+    def _run_step(self, X: torch.Tensor,  input_step: torch.Tensor) -> torch.Tensor:
         """
         Executes one training step for Phase 2.
 
@@ -419,11 +331,11 @@ class NeuralAdmixture():
             torch.Tensor: Computed loss for the batch.
         """
         self.optimizer.zero_grad(set_to_none=True)
-        recs, _ = self.model(input_step, 'P2')
-        loss = self.loss_function_P2(recs, X)
+        recs, _ = self.model(input_step)
+        loss = self.loss_function(recs, X)
         return loss
     
-    def _run_epoch_P2_supervised(self, dataloader: torch.utils.data.DataLoader):
+    def _run_epoch_supervised(self, epoch, dataloader: torch.utils.data.DataLoader):
         """
         Executes one epoch of training for Phase 2 (supervised version).
         
@@ -434,12 +346,12 @@ class NeuralAdmixture():
             X = X.to(self.device, non_blocking=self.pin)
             input_step = input_step.to(self.device, non_blocking=self.pin)
             
-            loss = self._run_step_P2_supervised(X, input_step, y)
+            loss = self._run_step_supervised(X, input_step, y)
             loss.backward()
             self.optimizer.step()
             self.raw_model.restrict_P()
             
-    def _run_step_P2_supervised(self, X: torch.Tensor,  input_step: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def _run_step_supervised(self, X: torch.Tensor,  input_step: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
         Executes one training step for Phase 2.
 
@@ -451,8 +363,8 @@ class NeuralAdmixture():
             torch.Tensor: Computed loss for the batch.
         """
         self.optimizer.zero_grad(set_to_none=True)
-        recs, probs = self.model(input_step, phase='P2')
-        loss = self.loss_function_P2(recs, X)
+        recs, probs = self.model(input_step)
+        loss = self.loss_function(recs, X)
         mask = y > -1
         loss += self.supervised_loss_weight*self.loss_function_supervised(probs[mask], y[mask])
         return loss
@@ -467,25 +379,29 @@ class NeuralAdmixture():
         Details:
             - The function calculates and prints Hudson's Fst for each pair
             of estimated populations, providing a measure of genetic divergence.
-
-        Note:
-            Only runs on the first GPU ('cuda:0') or CPU.
         """
         if self.master:
             dec = self.raw_model.P.data.detach().to('cpu')
             header = '\t'.join([f'Pop{p}' for p in range(k - 1)])
-            print(f'\nFst divergences between estimated populations: (K = {k})')
-            print(f'\t{header}')
-            print('Pop0')
+            
+            log.info("Results:")
+            log.info(f'\n        Fst divergences between estimated populations: (K = {k})')
+            log.info(f'        \t{header}')
+            log.info('        Pop0')
+            
             for j in range(1, k):
-                print(f'Pop{j}', end='')
+                output = f'        Pop{j}'
                 pop2 = dec[:, j]
+                
                 for l in range(j):
                     pop1 = dec[:, l]
                     fst = self._hudsons_fst(pop1, pop2)
-                    print(f"\t{fst:0.3f}", end="" if l != j - 1 else '\n')
-            print("\n")
-        return
+                    output += f"\t{fst:0.3f}"
+
+                log.info(output)
+            
+            log.info("\n")
+
     
     def process_results(self, data: torch.Tensor, Q: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
@@ -526,7 +442,7 @@ class NeuralAdmixture():
             den = torch.mean(pop1 * (1 - pop2) + pop2 * (1 - pop1)) + 1e-7
             return (num / den).item()
         except Exception as e:
-            print(f"Error computing Hudson's Fst: {e}")
+            log.info(f"Error computing Hudson's Fst: {e}")
             return float('nan')
         
     @staticmethod
@@ -558,5 +474,6 @@ class NeuralAdmixture():
             else:
                 raise ValueError("Unknown reduction")
             
-            log.info(f"Log likelihood: {result.item()}")
+            log.info(f"        Log likelihood: {result.item()}")
+            log.info("\n")
             return

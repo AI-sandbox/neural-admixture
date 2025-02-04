@@ -2,29 +2,29 @@ import argparse
 import dask.array as da
 import logging
 import sys
-import os
+import time
 import torch
-from codetiming import Timer
 from pathlib import Path
 from sklearn.model_selection import KFold
 from typing import List
 from argparse import ArgumentError, ArgumentTypeError
 from pathlib import Path
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
 
 from . import utils
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
 def fit_model(args: argparse.Namespace, trX: da.core.Array, device: torch.device, num_gpus: int,
               tr_pops: str, master: bool) -> None:
     """Wrapper function to start training
     """
-    (epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
-    learning_rate_P2, save_dir, activation_str, hidden_size, initialization, 
-    n_components, name, seed, supervised_loss_weight, num_cpus) = (int(args.epochs_P1), int(args.epochs_P2), int(args.batch_size_P1), 
-                                int(args.batch_size_P2), float(args.learning_rate_P1_P), float(args.learning_rate_P2), args.save_dir, 
+    (epochs, batch_size, learning_rate, save_dir, activation_str, hidden_size, initialization, 
+    n_components, name, seed, supervised_loss_weight, num_cpus) = (int(args.epochs), int(args.batch_size), float(args.learning_rate), args.save_dir, 
                                 args.activation, int(args.hidden_size), args.initialization if not bool(args.supervised) else 'supervised', 
                                 int(args.pca_components), args.name, int(args.seed), float(args.supervised_loss_weight), int(args.num_cpus))
         
@@ -32,10 +32,8 @@ def fit_model(args: argparse.Namespace, trX: da.core.Array, device: torch.device
     
     K = int(args.k)
     data, y = utils.initialize_data(master, trX, tr_pops)
-    P, Q, model = utils.train(initialization, device, save_dir, name, K, seed, n_components, 
-                    epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
-                    learning_rate_P2, data, num_gpus, activation_str, hidden_size, master, num_cpus,
-                    y, supervised_loss_weight)
+    P, Q, model = utils.train(initialization, device, save_dir, name, K, seed, n_components, epochs, batch_size, learning_rate, data, num_gpus, 
+                            activation_str, hidden_size, master, num_cpus, y, supervised_loss_weight)
     if master:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
         save_path = f'{save_dir}/{name}.pt'
@@ -102,15 +100,16 @@ def main(rank: int, argv: List[str], num_gpus):
             device = torch.device('cpu')
         
         if master:
-            utils.print_neural_admixture_banner()
             log.info(f"There are {args.num_cpus} CPUs and {num_gpus} GPUs available for this execution.")
+            log.info("")
             log.info(f"Running on K = {args.k}.")
+<<<<<<< Updated upstream
+=======
+            log.info("")
+>>>>>>> Stashed changes
             Path(args.save_dir).mkdir(parents=True, exist_ok=True)
         
-        # Start training:
-        t = Timer()
-        t.start()
-        
+        t0 = time.time()
         trX, tr_pops = utils.read_data(args.data_path, master, args.populations_path, args.imputation)
 
         #if args.cv is not None:
@@ -119,16 +118,20 @@ def main(rank: int, argv: List[str], num_gpus):
         fit_model(args, trX, device, num_gpus, tr_pops, master)
         
         if master:
-            log.info('Exiting...')
-            elapsed_time = t.stop()
-            log.info(f'Total elapsed time: {elapsed_time:.2f} seconds.')
+            t1 = time.time()
+            log.info("")
+            log.info(f'Total elapsed time: {t1-t0:.2f} seconds.')
         
         logging.shutdown()
         utils.ddp_setup('end', rank, num_gpus)
     
     except (ArgumentError, ArgumentTypeError) as e:
         if master:
+<<<<<<< Updated upstream
             log.error(f"Error parsing arguments")
+=======
+            log.info(f"Error parsing arguments.")
+>>>>>>> Stashed changes
         logging.shutdown()
         utils.ddp_setup('end', rank, num_gpus)
         if master:
@@ -136,11 +139,19 @@ def main(rank: int, argv: List[str], num_gpus):
         
     except Exception as e:
         if master:
+<<<<<<< Updated upstream
             log.error(f"Unexpected error")
         logging.shutdown()
         utils.ddp_setup('end', rank, num_gpus)        
         if master:
             raise e
+=======
+            log.info(f"Unexpected error.")
+        logging.shutdown()
+        utils.ddp_setup('end', rank, num_gpus)
+        if master:
+            raise e      
+>>>>>>> Stashed changes
         
 if __name__ == '__main__':
     main(sys.argv[1:])

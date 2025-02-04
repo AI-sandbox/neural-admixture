@@ -5,37 +5,8 @@ from torch.utils.data import Dataset, DataLoader, BatchSampler
 from torch.utils.data.distributed import DistributedSampler
 from typing import Tuple, Union, List, Generator
 
-# DATALOADERS:
-def dataloader_P1(data: torch.Tensor, Q: torch.Tensor, batch_size: int, num_gpus: int, seed: int, 
-                generator: torch.Generator, pin: bool, num_cpus: int) -> Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]:
-    """
-    Creates a DataLoader with batch sampler or distributed sampler for the phase 1.
-
-    Parameters:
-    - data (torch.Tensor): Input tensor data.
-    - Q (torch.Tensor): Tensor associated with Q values.
-    - batch_size (int): Size of each batch.
-    - num_gpus (int): Number of GPUs available for distributed training.
-    - seed (int): Seed for random number generation.
-    - generator (torch.Generator): Random number generator instance.
-    - pin (bool): Whether to pin memory for data loading.
-
-    Returns:
-    - Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]: DataLoader object and the used sampler.
-    """
-    dataset = Dataset_P1(data, Q)
-    if num_gpus > 1:
-        sampler = DistributedSampler(dataset, shuffle=True, seed=seed)
-        dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, collate_fn=collate_fn_P1, pin_memory=pin)
-    elif num_gpus == 1:
-        sampler = BatchSampler(dataset, batch_size, generator, shuffle=True, seed=seed)
-        dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P1, pin_memory=pin)
-    else:
-        sampler = BatchSampler(dataset, batch_size, generator, shuffle=True, seed=seed)
-        dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P1, num_workers=max(2, min(num_cpus - 1, int(num_cpus * 0.065))))
-    return dataloader
-
-def dataloader_P2(X: torch.Tensor, input: torch.Tensor, batch_size: int, num_gpus: int, seed: int, 
+# DATALOADER:
+def dataloader_train(X: torch.Tensor, input: torch.Tensor, batch_size: int, num_gpus: int, seed: int, 
                 generator: torch.Generator, pin: bool, y: torch.Tensor, num_cpus: int) -> Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]:
     """
     Creates a DataLoader with batch sampler or distributed sampler for the phase 2.
@@ -52,16 +23,16 @@ def dataloader_P2(X: torch.Tensor, input: torch.Tensor, batch_size: int, num_gpu
     Returns:
     - Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]: DataLoader object and the used sampler.
     """
-    dataset = Dataset_P2(X, input, y)
+    dataset = Dataset_train(X, input, y)
     if num_gpus > 1:
         sampler = DistributedSampler(dataset, shuffle=True, seed=seed)
-        dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, collate_fn=collate_fn_P2, pin_memory=pin)
+        dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, collate_fn=collate_fn_train, pin_memory=pin)
     elif num_gpus == 1:
         sampler = BatchSampler(dataset, batch_size, generator, seed, shuffle=True, pad=True)
-        dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P2, pin_memory=pin)
+        dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_train, pin_memory=pin)
     else:
         sampler = BatchSampler(dataset, batch_size, generator, seed, shuffle=True, pad=True)
-        dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_P2, num_workers=max(2, min(num_cpus - 1, int(num_cpus * 0.065))))
+        dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_train, num_workers=max(2, min(num_cpus - 1, int(num_cpus * 0.065))))
     return dataloader
 
 def dataloader_inference(input: torch.Tensor, batch_size: int, seed: int, generator: torch.Generator, num_gpus: int, 
@@ -87,65 +58,9 @@ def dataloader_inference(input: torch.Tensor, batch_size: int, seed: int, genera
         dataloader = DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn_inference, num_workers=max(2, min(num_cpus - 1, int(num_cpus * 0.065))))
     return dataloader
     
-# F1 DATASET:
-class Dataset_P1(Dataset):
-    """
-    Dataset for phase 1 of Neural Admixture.
-    
-    Args:
-        data (torch.Tensor): Tensor containing the main data of the dataset.
-        Q (torch.Tensor): Tensor containing additional information associated with the data.
-    """
-    def __init__(self, data: torch.Tensor, Q: torch.Tensor):
-        """
-        Args:
-            data (torch.Tensor): Tensor containing the main data of the dataset.
-            Q (torch.Tensor): Tensor containing additional information associated with the data.
-        """
-        self.data = data
-        self.Q = Q
-        self.num_total_elements = data.size(0)
 
-    def __len__(self) -> int:
-        """
-        Returns:
-            int: Total number of elements in the dataset.
-        """
-        return self.num_total_elements
-
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Args:
-            idx (int): Index of the item to retrieve.
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: A tuple containing a `q_item` tensor 
-            and a `data_item` tensor corresponding to the given index.
-        """
-        data_item = self.data[idx]
-        q_item = self.Q[idx]
-        return q_item, data_item
-    
-def collate_fn_P1(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Combines a list of pairs (q_tensor, target) into stacked tensors.
-
-    Args:
-        batch (List[Tuple[torch.Tensor, torch.Tensor]]): A list of tuples 
-        containing `q_tensor` and `target` tensors.
-
-    Returns:
-        Tuple[torch.Tensor, torch.Tensor]: Two stacked tensors. The first 
-        contains the `q_tensors` and the second contains the `targets`.
-    """
-    q_tensors, targets = zip(*batch)
-    q_tensors = torch.stack(q_tensors, dim=0)
-    targets = torch.stack(targets, dim=0)
-    return q_tensors, targets
-
-
-# F2 DATASET:
-class Dataset_P2(Dataset):
+# P2 DATASET:
+class Dataset_train(Dataset):
     """
     Dataset for phase 2 of Neural Admixture.
     
@@ -183,7 +98,7 @@ class Dataset_P2(Dataset):
         batch_y = self.y[idx]
         return batch_X, batch_input, batch_y
 
-def collate_fn_P2(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor]:
+def collate_fn_train(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Combines a list of pairs (batch_X, batch_input) into stacked tensors.
 
