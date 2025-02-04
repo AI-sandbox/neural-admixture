@@ -103,10 +103,7 @@ def main(rank: int, argv: List[str], num_gpus):
             log.info(f"There are {args.num_cpus} CPUs and {num_gpus} GPUs available for this execution.")
             log.info("")
             log.info(f"Running on K = {args.k}.")
-<<<<<<< Updated upstream
-=======
             log.info("")
->>>>>>> Stashed changes
             Path(args.save_dir).mkdir(parents=True, exist_ok=True)
         
         t0 = time.time()
@@ -127,11 +124,7 @@ def main(rank: int, argv: List[str], num_gpus):
     
     except (ArgumentError, ArgumentTypeError) as e:
         if master:
-<<<<<<< Updated upstream
             log.error(f"Error parsing arguments")
-=======
-            log.info(f"Error parsing arguments.")
->>>>>>> Stashed changes
         logging.shutdown()
         utils.ddp_setup('end', rank, num_gpus)
         if master:
@@ -139,19 +132,11 @@ def main(rank: int, argv: List[str], num_gpus):
         
     except Exception as e:
         if master:
-<<<<<<< Updated upstream
             log.error(f"Unexpected error")
         logging.shutdown()
         utils.ddp_setup('end', rank, num_gpus)        
         if master:
             raise e
-=======
-            log.info(f"Unexpected error.")
-        logging.shutdown()
-        utils.ddp_setup('end', rank, num_gpus)
-        if master:
-            raise e      
->>>>>>> Stashed changes
         
 if __name__ == '__main__':
     main(sys.argv[1:])

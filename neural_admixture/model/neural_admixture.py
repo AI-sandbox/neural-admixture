@@ -191,9 +191,6 @@ class NeuralAdmixture():
         self.dtype = torch.bfloat16 if 'cuda' in self.device.type else torch.float32
         self.master = master
         
-        # Context manager for mixed precision:
-        self.context_manager = torch.autocast(device_type=self.device_type, dtype=self.dtype) if self.num_gpus>0 else nullcontext()
-
         # Random seed configuration
         self.seed = seed
         self.generator = torch.Generator().manual_seed(self.seed)
