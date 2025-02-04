@@ -13,7 +13,7 @@ from ..model.neural_admixture import Q_P
 from ..model.switchers import Switchers
 torch.serialization.add_safe_globals([GPUIncrementalPCA])
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
 def main(argv: List[str]):

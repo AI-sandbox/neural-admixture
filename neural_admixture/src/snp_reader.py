@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Tuple
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
 class SNPReader:

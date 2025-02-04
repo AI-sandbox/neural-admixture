@@ -4,11 +4,40 @@ import torch
 import torch.multiprocessing as mp
 from ._version import __version__
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
+def print_neural_admixture_banner(version: str="2.0") -> None:
+    """
+    Display the Neural Admixture banner with version and author information.
+
+    Args:
+        version (str): Version number to display. Defaults to "2.0".
+
+    Returns:
+        None
+    """
+    banner = r"""
+    _   _                      _       ___  ____  __  __ _______   _________ _    _ _____  ______ 
+   | \ | |                    | |     / _ \|  _ \|  \/  |_   _\ \ / /__   __| |  | |  __ \|  ____|
+   |  \| | ___ _   _ _ __ __ _| |    / /_\ | | | | \  / | | |  \ V /   | |  | |  | | |__) | |__   
+   | . ` |/ _ \ | | | '__/ _` | |    |  _  | | | | |\/| | | |   > <    | |  | |  | |  _  /|  __|  
+   | |\  |  __/ |_| | | | (_| | |    | | | | |_| | |  | |_| |_ / . \   | |  | |__| | | \ \| |____ 
+   |_| \_|\___|\__,_|_|  \__,_|_|    \_| |_/____/|_|  |_|_____/_/ \_\  |_|   \____/|_|  \_\______|
+                                                                                          
+    """
+    
+    info = f"""
+    Version: {version}
+    Authors: Joan Saurina Ricós, Albert Dominguez Mantes, 
+            Daniel Mas Montserrat and Alexander G. Ioannidis.
+    
+    """
+    
+    log.info("\n" + banner + info)
+
 def main():
-    log.info(f"Neural ADMIXTURE - Version {__version__}")
+    print_neural_admixture_banner(__version__)
     arg_list = tuple(sys.argv)
     
     assert len(arg_list) > 1, 'Please provide either the argument "train" or "infer" to choose running mode.'

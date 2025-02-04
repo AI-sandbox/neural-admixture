@@ -16,7 +16,7 @@ from typing import List, Tuple, Union
 from .snp_reader import SNPReader
 from ..model.switchers import Switchers
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
 def parse_train_args(argv: List[str]):
@@ -26,13 +26,9 @@ def parse_train_args(argv: List[str]):
                                            description='Rapid population clustering with autoencoders - training mode',
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
     
-    parser.add_argument('--epochs_P1', required=False, type=int, default=5, help='Maximum number of epochs for phase 1.')
-    parser.add_argument('--epochs_P2', required=False, type=int, default=250, help='Maximum number of epochs for phase 2.')
-    parser.add_argument('--batch_size_P1', required=False, default=400, type=int, help='Batch size for phase 1.')
-    parser.add_argument('--batch_size_P2', required=False, default=800, type=int, help='Batch size for phase 2.')
-    
-    parser.add_argument('--learning_rate_P1_P', required=False, default=4e-4, type=float, help='Learning rate for phase 1 (P).')
-    parser.add_argument('--learning_rate_P2', required=False, default=17e-4, type=float, help='Learning rate for phase 2.')
+    parser.add_argument('--epochs', required=False, type=int, default=285, help='Maximum number of epochs.')
+    parser.add_argument('--batch_size', required=False, default=800, type=int, help='Batch size.')
+    parser.add_argument('--learning_rate', required=False, default=25e-4, type=float, help='Learning rate.')
 
     parser.add_argument('--initialization', required=False, type=str, default = 'gmm',
                         choices=['kmeans', 'gmm', 'supervised'], help='Q, P initialization.')
@@ -54,7 +50,7 @@ def parse_train_args(argv: List[str]):
     
     parser.add_argument('--multi_gpu', action='store_true', default=False, help='Execute on multi-GPU mode.')
     parser.add_argument('--num_gpus', required=False, default=0, type=int, help='Number of GPUs to be used in the execution.')
-    parser.add_argument('--num_cpus', required=False, default=1, type=int, help='Number of GPUs to be used in the execution.')
+    parser.add_argument('--num_cpus', required=False, default=1, type=int, help='Number of CPUs to be used in the execution.')
     
     #parser.add_argument('--cv', required=False, default=None, type=int, help='Number of folds for cross-validation')
     return parser.parse_args(argv)
@@ -72,7 +68,7 @@ def parse_infer_args(argv: List[str]):
     parser.add_argument('--batch_size', required=False, default=1000, type=int, help='Batch size.')
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
     
-    parser.add_argument('--num_cpus', required=False, default=1, type=int, help='Number of GPUs to be used in the execution.')
+    parser.add_argument('--num_cpus', required=False, default=1, type=int, help='Number of CPUs to be used in the execution.')
 
     return parser.parse_args(argv)
 
@@ -93,7 +89,7 @@ def read_data(tr_file: str, master: bool, tr_pops_f: str=None, imputation: str='
     data = snp_reader.read_data(tr_file, imputation, master)
     if master:
         log.info(f'Data contains {data.shape[0]} samples and {data.shape[1]} SNPs.')
-        log.info('Data loaded.')
+        log.info("")
     if tr_pops_f:
         with open(tr_pops_f, 'r') as fb:
             tr_pops = [p.strip() for p in fb.readlines()]
@@ -119,9 +115,8 @@ def initialize_data(master: bool, trX: da.core.Array, tr_pops: Union[str, None]=
     return data, tr_pops
 
 def train(initialization: str, device: torch.device, save_dir : str, name: str, 
-        k: int, seed: int, n_components: int, epochs_P1: str, epochs_P2: str, batch_size_P1: int, 
-        batch_size_P2: int, learning_rate_P1_P: int,learning_rate_P2: int, data: np.ndarray, 
-        num_gpus: int, activation_str: str, hidden_size: int, master: bool, num_cpus: int,
+        k: int, seed: int, n_components: int, epochs: int, batch_size: int, learning_rate: float, 
+        data: np.ndarray, num_gpus: int, activation_str: str, hidden_size: int, master: bool, num_cpus: int,
         y: str, supervised_loss_weight: float) -> Tuple[np.ndarray, np.ndarray, torch.nn.Module]:
     """
     Train the model using specified initialization, hyperparameters, and data.
@@ -134,12 +129,9 @@ def train(initialization: str, device: torch.device, save_dir : str, name: str,
         k (int): Number of clusters or components.
         seed (int): Random seed for reproducibility.
         n_components (int): Number of components to use in the model.
-        epochs_P1 (int): Number of epochs for phase 1 of training.
-        epochs_P2 (int): Number of epochs for phase 2 of training.
-        batch_size_P1 (int): Batch size for phase 1 of training.
-        batch_size_P2 (int): Batch size for phase 2 of training.
-        learning_rate_P1_P (float): Learning rate for phase 1 of training.
-        learning_rate_P2 (float): Learning rate for phase 2 of training.
+        epochs (int): Number of epochs.
+        batch_size (int): Batch size.
+        learning_rate (float): Learning rate.
         data (np.ndarray): Training data in numpy array format.
         num_gpus (int): Number of GPUs to use.
         activation_str (str): String key for selecting the activation function.
@@ -154,8 +146,7 @@ def train(initialization: str, device: torch.device, save_dir : str, name: str,
     switchers = Switchers.get_switchers()
     activation = switchers['activations'][activation_str](0)
     P, Q, model = switchers['initializations'][initialization](
-        epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, learning_rate_P1_P,
-        learning_rate_P2, k, seed, init_path, name, n_components, data, device, 
+        epochs, batch_size, learning_rate, k, seed, init_path, name, n_components, data, device, 
         num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight)
     
     return P, Q, model
@@ -178,6 +169,8 @@ def write_outputs(Q: np.ndarray, run_name: str, K: int, out_path: str, P: np.nda
     np.savetxt(out_path/f"{run_name}.{K}.Q", Q, delimiter=' ')
     if P is not None:
         np.savetxt(out_path/f"{run_name}.{K}.P", P, delimiter=' ')
+    
+    log.info("Q and P matrices saved.")
     return 
 
 def ddp_setup(stage: str, rank: int, num_gpus: int) -> None:
@@ -262,33 +255,3 @@ def set_seed(seed: int) -> None:
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-def print_neural_admixture_banner(version: str="2.0") -> None:
-    """
-    Display the Neural Admixture banner with version and author information.
-
-    Args:
-        version (str): Version number to display. Defaults to "2.0".
-
-    Returns:
-        None
-    """
-    banner = r"""
-    _   _                      _       ___  ____  __  __ _______   _________ _    _ _____  ______ 
-   | \ | |                    | |     / _ \|  _ \|  \/  |_   _\ \ / /__   __| |  | |  __ \|  ____|
-   |  \| | ___ _   _ _ __ __ _| |    / /_\ | | | | \  / | | |  \ V /   | |  | |  | | |__) | |__   
-   | . ` |/ _ \ | | | '__/ _` | |    |  _  | | | | |\/| | | |   > <    | |  | |  | |  _  /|  __|  
-   | |\  |  __/ |_| | | | (_| | |    | | | | |_| | |  | |_| |_ / . \   | |  | |__| | | \ \| |____ 
-   |_| \_|\___|\__,_|_|  \__,_|_|    \_| |_/____/|_|  |_|_____/_/ \_\  |_|   \____/|_|  \_\______|
-                                                                                          
-    """
-    
-    info = f"""
-    Version: {version}
-    Paper: https://www.nature.com/articles/s43588-023-00482-7
-    Authors: Joan Saurina Ricós, Albert Dominguez Mantes, 
-            Daniel Mas Montserrat and Alexander G. Ioannidis
-    
-    """
-    
-    log.info("\n" + banner + info)

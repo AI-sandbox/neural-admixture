@@ -19,7 +19,7 @@ from .neural_admixture import NeuralAdmixture
 
 torch.serialization.add_safe_globals([GPUIncrementalPCA])
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
 def determine_device_for_tensors(data_shape: tuple, K: int, device: torch.device, memory_threshold: float = 0.9) -> torch.device:
@@ -112,7 +112,7 @@ def load_or_compute_pca(path: Optional[str], X: np.ndarray, n_components: int, b
             pca_obj = torch.load(path, weights_only=True, map_location=device)
             pca_obj.to(device)
             if master:
-                log.info('PCA loaded.')
+                log.info('       PCA loaded.')
             X_pca = pca_obj.transform(X).cpu()
             assert pca_obj.n_features_in_ == X_original.shape[1], 'Computed PCA and training data do not have the same number of features'
         else:
@@ -136,7 +136,7 @@ def load_or_compute_pca(path: Optional[str], X: np.ndarray, n_components: int, b
         if path is not None:
             torch.save(pca_obj.cpu(), path)
         if master:
-            log.info(f"{n_components}D PCA object not found. Performing IncrementalPCA...")
+            log.info(f"       {n_components}D PCA object not found. Performing IncrementalPCA...")
             
     try:
         if path is not None:
@@ -153,20 +153,16 @@ class GMMInitialization(object):
     Class to initialize a neural admixture model using Gaussian Mixture Models (GMM).
     """
     @classmethod
-    def get_decoder_init(cls, epochs_P1: int, epochs_P2: int, batch_size_P1: int, batch_size_P2: int, learning_rate_P1_P: float, 
-                        learning_rate_P2: float, K: int, seed: int, init_path: Path, name: str, n_components: int, data: np.ndarray, 
-                        device: torch.device, num_gpus: int, hidden_size: int, activation: torch.nn.Module, master: bool,
-                        num_cpus: int) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+    def get_decoder_init(cls, epochs: int, batch_size: int, learning_rate: float, K: int, seed: int, init_path: Path, 
+                        name: str, n_components: int, data: np.ndarray, device: torch.device, num_gpus: int, hidden_size: int, 
+                        activation: torch.nn.Module, master: bool, num_cpus: int) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Initializes P and Q matrices and trains a neural admixture model using GMM.
 
         Args:
-            epochs_P1 (int): Number of epochs for phase 1.
-            epochs_P2 (int): Number of epochs for phase 2.
-            batch_size_P1 (int): Batch size for phase 1.
-            batch_size_P2 (int): Batch size for phase 2.
-            learning_rate_P1_P (float): Learning rate for phase 1.
-            learning_rate_P2 (float): Learning rate for phase 2.
+            epochs (int): Number of epochs
+            batch_size (int): Batch size.
+            learning_rate (float): Learning rate.
             K (int): Number of components (clusters).
             seed (int): Random seed for reproducibility.
             init_path (Path): Path to store PCA initialization.
@@ -182,13 +178,15 @@ class GMMInitialization(object):
         Returns:
             Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]: Initialized P matrix, Q matrix, and trained model.
         """
+        if master:
+            log.info('Running Gaussian Mixture initialization...')
+            log.info("")
         t0 = time.time()
         X_pca, pca_obj = load_or_compute_pca(init_path, data, n_components, 1024, device, name, master, sample_fraction=1)
         te = time.time()
         if master:
-            log.info('Running GMM initialization...')
-            log.info(f'PCA initialized in {te-t0} seconds.')
-            log.info('Plot rendered.')
+            log.info(f'       PCA initialized in {te-t0:.3f} seconds.')
+            log.info("")
 
         gmm = GaussianMixture(n_components=K, n_init=3, init_params='k-means++', tol=1e-4, covariance_type='full')
         #gmm = GaussianMixture(n_components=K, n_features=X_pca.shape[1], init_params='kmeans++', covariance_type='full', device=device).to(device)
@@ -198,14 +196,12 @@ class GMMInitialization(object):
         device_tensors = determine_device_for_tensors(data.shape, K, device)
         #gmm.mu.squeeze(0)
         P_init = torch.as_tensor(pca_obj.inverse_transform(gmm.means_), dtype=torch.float32, device=device_tensors).T.contiguous()
-        Q_init = torch.as_tensor(gmm.predict_proba(X_pca), dtype=torch.float32, device=device_tensors)
-        data = torch.as_tensor(data, dtype=torch.bfloat16 if 'cuda' in device.type else torch.float32, device=device_tensors)
+        data = torch.as_tensor(data, dtype=torch.float32, device=device_tensors)
         input = X_pca.to(device_tensors)
         
-        model = NeuralAdmixture(K, epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, device, seed, num_gpus,
-                                learning_rate_P1_P, learning_rate_P2, device_tensors, master, num_cpus)
+        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device_tensors, master, num_cpus)
         
-        P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_pca.shape[1], K, activation, input, Q_init)
+        P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_pca.shape[1], K, activation, input)
 
         return P, Q, raw_model
 
@@ -267,20 +263,16 @@ class KMeansInitialization(object):
         return avg_centers
 
     @classmethod
-    def get_decoder_init(cls, epochs_P1: int, epochs_P2: int, batch_size_P1: int, batch_size_P2: int, learning_rate_P1_P: float, 
-                        learning_rate_P2: float, K: int, seed: int, init_path: Path, name: str, n_components: int, data: np.ndarray, 
-                        device: torch.device, num_gpus: int, hidden_size: int, activation: torch.nn.Module, master: bool,
-                        num_cpus: int) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+    def get_decoder_init(cls, epochs: int, batch_size: int, learning_rate: float, K: int, seed: int, init_path: Path, 
+                        name: str, n_components: int, data: np.ndarray, device: torch.device, num_gpus: int, hidden_size: int, 
+                        activation: torch.nn.Module, master: bool, num_cpus: int) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Initializes P and Q matrices and trains a neural admixture model using consensus K-Means.
 
         Args:
-            epochs_P1 (int): Number of epochs for phase 1.
-            epochs_P2 (int): Number of epochs for phase 2.
-            batch_size_P1 (int): Batch size for phase 1.
-            batch_size_P2 (int): Batch size for phase 2.
-            learning_rate_P1_P (float): Learning rate for phase 1.
-            learning_rate_P2 (float): Learning rate for phase 2.
+            epochs (int): Number of epochs.
+            batch_size (int): Batch size.
+            learning_rate (float): Learning rate.
             K (int): Number of components (clusters).
             seed (int): Random seed for reproducibility.
             init_path (Path): Path to store PCA initialization.
@@ -296,13 +288,15 @@ class KMeansInitialization(object):
         Returns:
             Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]: Initialized P matrix, Q matrix, and trained model.
         """
+        if master:
+            log.info('Running KMeans initialization...')
+            log.info("")
         t0 = time.time()
         X_pca, pca_obj = load_or_compute_pca(init_path, data, n_components, 1024, device, name, master, sample_fraction=1)
         te = time.time()
         if master:
-            log.info('Running KMeans initialization...')
-            log.info(f'PCA initialized in {te-t0} seconds.')
-            log.info('Plot rendered.')
+            log.info(f'       PCA initialized in {te-t0} seconds.')
+            log.info("")
 
         n_runs = 10 
         rng = np.random.default_rng(seed) 
@@ -310,19 +304,16 @@ class KMeansInitialization(object):
         
         avg_centers = cls.consensus_clustering(X_pca, K, seeds)
         final_k_means = KMeans(n_clusters=K, init=avg_centers, n_init=1, max_iter=300, random_state=seed)
-        dists = final_k_means.fit_transform(X_pca)
         
         device_tensors = determine_device_for_tensors(data.shape, K, device)
                     
         P_init = torch.as_tensor(pca_obj.inverse_transform(final_k_means.cluster_centers_), dtype=torch.float32, device=device_tensors).T.contiguous()
-        Q_init = torch.as_tensor(-dists, dtype=torch.float32, device=device_tensors).softmax(dim=1)
-        data = torch.as_tensor(data, dtype=torch.bfloat16 if 'cuda' in device.type else torch.float32, device=device_tensors)
+        data = torch.as_tensor(data, dtype=torch.float32, device=device_tensors)
         input = X_pca.to(device_tensors)
         
-        model = NeuralAdmixture(K, epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, device, seed, num_gpus,
-                            learning_rate_P1_P, learning_rate_P2, device_tensors, master, num_cpus)
+        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device_tensors, master, num_cpus)
         
-        P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_pca.shape[1], K, activation, input, Q_init)
+        P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_pca.shape[1], K, activation, input)
 
         return P, Q, raw_model
     
@@ -330,10 +321,9 @@ class SupervisedInitialization(object):
     """Supervised initialization
     """
     @classmethod
-    def get_decoder_init(cls, epochs_P1: int, epochs_P2: int, batch_size_P1: int, batch_size_P2: int, learning_rate_P1_P: float, 
-                        learning_rate_P2: float, K: int, seed: int, init_path: Path, name: str, n_components: int, data: np.ndarray, 
-                        device: torch.device, num_gpus: int, hidden_size: int, activation: torch.nn.Module, master: bool,
-                        num_cpus: int, y: str, supervised_loss_weight: float) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+    def get_decoder_init(cls, epochs: int, batch_size: int, learning_rate: float, K: int, seed: int, init_path: Path, 
+                        name: str, n_components: int, data: np.ndarray, device: torch.device, num_gpus: int, hidden_size: int, 
+                        activation: torch.nn.Module, master: bool, num_cpus: int, y: str, supervised_loss_weight: float) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         if master:
             log.info('Running Supervised initialization...')
         assert y is not None, 'Ground truth ancestries needed for supervised mode'
@@ -362,8 +352,7 @@ class SupervisedInitialization(object):
         input = X_pca.to(device_tensors)
         y = torch.as_tensor(y_num, dtype=torch.int64, device=device_tensors)
 
-        model = NeuralAdmixture(K, epochs_P1, epochs_P2, batch_size_P1, batch_size_P2, device, seed, num_gpus,
-                            learning_rate_P1_P, learning_rate_P2, device_tensors, master, num_cpus, supervised_loss_weight)
+        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device_tensors, master, num_cpus, supervised_loss_weight)
         
         P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_pca.shape[1], K, activation, input, y=y)
        
