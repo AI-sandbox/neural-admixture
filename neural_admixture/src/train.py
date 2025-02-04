@@ -9,10 +9,6 @@ from sklearn.model_selection import KFold
 from typing import List
 from argparse import ArgumentError, ArgumentTypeError
 from pathlib import Path
-<<<<<<< Updated upstream
-
-=======
->>>>>>> Stashed changes
 
 from . import utils
 
