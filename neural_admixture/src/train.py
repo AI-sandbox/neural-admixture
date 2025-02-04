@@ -88,17 +88,20 @@ def main(rank: int, argv: List[str], num_gpus):
             return
         args = utils.parse_train_args(argv)
         
-        if torch.cuda.is_available():
-            device = torch.device(f'cuda:{int(rank)}')
-        elif torch.backends.mps.is_available():
-            device = torch.device('mps')
+        if num_gpus>0:
+            if torch.cuda.is_available():
+                device = torch.device(f'cuda:{int(rank)}')
+            elif torch.backends.mps.is_available():
+                device = torch.device('mps')
+            else:
+                device = torch.device('cpu')
         else:
             device = torch.device('cpu')
         
         if master:
-            log.info(f"There are {args.num_cpus} CPUs and {num_gpus} GPUs available for this execution.")
+            log.info(f"    There are {args.num_cpus} CPUs and {num_gpus} GPUs available for this execution.")
             log.info("")
-            log.info(f"Running on K = {args.k}.")
+            log.info(f"    Running on K = {args.k}.")
             log.info("")
             Path(args.save_dir).mkdir(parents=True, exist_ok=True)
         
@@ -113,14 +116,15 @@ def main(rank: int, argv: List[str], num_gpus):
         if master:
             t1 = time.time()
             log.info("")
-            log.info(f'Total elapsed time: {t1-t0:.2f} seconds.')
+            log.info(f"    Total elapsed time: {t1-t0:.2f} seconds.")
+            log.info("")
         
         logging.shutdown()
         utils.ddp_setup('end', rank, num_gpus)
     
     except (ArgumentError, ArgumentTypeError) as e:
         if master:
-            log.error(f"Error parsing arguments")
+            log.error(f"    Error parsing arguments")
         logging.shutdown()
         utils.ddp_setup('end', rank, num_gpus)
         if master:
@@ -128,7 +132,7 @@ def main(rank: int, argv: List[str], num_gpus):
         
     except Exception as e:
         if master:
-            log.error(f"Unexpected error")
+            log.error(f"    Unexpected error")
         logging.shutdown()
         utils.ddp_setup('end', rank, num_gpus)        
         if master:

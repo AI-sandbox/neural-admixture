@@ -23,7 +23,7 @@ class SNPReader:
             np.ndarray: averaged genotype array of shape (n_samples, n_snps)
         """
         if master:
-            log.info('Input format is VCF.')
+            log.info("    Input format is VCF.")
         import allel
         f_tr = allel.read_vcf(file)
         calldata = f_tr["calldata/GT"]
@@ -40,7 +40,7 @@ class SNPReader:
             np.ndarray: averaged genotype array of shape (n_samples, n_snps)
         """
         if master:
-            log.info('Input format is HDF5.')
+            log.info("    Input format is HDF5.")
         import h5py
         f_tr = h5py.File(file, 'r')
         return f_tr['snps']
@@ -56,7 +56,7 @@ class SNPReader:
             da.core.Array: averaged genotype Dask array of shape (n_samples, n_snps)
         """
         if master:
-            log.info('Input format is BED.')
+            log.info("    Input format is BED.")
         from pandas_plink import read_plink
         _, _, G = read_plink(str(Path(file).with_suffix("")))
         return (G.T/2)
@@ -72,12 +72,12 @@ class SNPReader:
             np.ndarray: averaged genotype array of shape (n_samples, n_snps)
         """
         if master:
-            log.info('Input format is PGEN.')
+            log.info("    Input format is PGEN.")
         try:
             import pgenlib as pg
         except ImportError as ie:
             if master:
-                log.error('Cannot read PGEN file as pgenlib is not installed.')
+                log.error("    Cannot read PGEN file as pgenlib is not installed.")
             sys.exit(1)
         except Exception as e:
             raise e
@@ -98,7 +98,7 @@ class SNPReader:
             np.ndarray: averaged genotype array of shape (n_samples, n_snps)
         """
         if master:
-            log.info('Input format is NPY.')
+            log.info("    Input format is NPY.")
         calldata = np.load(file)
         assert calldata.ndim in [2, 3]
         if calldata.ndim == 2:
@@ -129,14 +129,14 @@ class SNPReader:
             G = self._read_npy(file, master)
         else:
             if master:
-                log.error('Invalid format. Unrecognized file format. Make sure file ends with .vcf | .vcf.gz | .bed | .pgen | .h5 | .hdf5 | .npy')
+                log.error("    Invalid format. Unrecognized file format. Make sure file ends with .vcf | .vcf.gz | .bed | .pgen | .h5 | .hdf5 | .npy")
             sys.exit(1)
         if isinstance(G, np.ndarray):
             G = da.from_array(G)
         G = self._impute(G, master, imputation)
         if master:
             if not (int(G.min().compute()) == 0 and int(G.max().compute()) == 1):
-                raise AssertionError('Only biallelic SNPs are supported. Please make sure multiallelic sites have been removed.')
+                raise AssertionError("    Only biallelic SNPs are supported. Please make sure multiallelic sites have been removed.")
         return G if G.mean().compute() < 0.5 else 1-G
 
     @staticmethod
@@ -159,14 +159,14 @@ class SNPReader:
         mask = mask[:, valid_columns_mask]
         if mask.any().compute():
             if master:
-                log.warning(f"Data contains missing values. Will perform {method}-imputation.")
+                log.warning(f"    Data contains missing values. Will perform {method}-imputation.")
             if method == "zero":
                 G_imputed = da.where(mask, 0., G)
             elif method == "mean":
                 G_imputed = da.where(mask, da.nanmean(G, axis=0), G)
             else:
                 if master:
-                    raise ValueError("Invalid imputation method. Only 'zero' and 'mean' are supported.")
+                    raise ValueError("    Invalid imputation method. Only 'zero' and 'mean' are supported.")
         else:
             G_imputed = G
     

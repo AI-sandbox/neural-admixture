@@ -48,7 +48,6 @@ def parse_train_args(argv: List[str]):
     parser.add_argument('--populations_path', required=False, default='', type=str, help='Path containing the main data populations')
     parser.add_argument('--supervised', action='store_true', default=False, help='If specified, will run the supervised version')
     
-    parser.add_argument('--multi_gpu', action='store_true', default=False, help='Execute on multi-GPU mode.')
     parser.add_argument('--num_gpus', required=False, default=0, type=int, help='Number of GPUs to be used in the execution.')
     parser.add_argument('--num_cpus', required=False, default=1, type=int, help='Number of CPUs to be used in the execution.')
     
@@ -88,8 +87,7 @@ def read_data(tr_file: str, master: bool, tr_pops_f: str=None, imputation: str='
     snp_reader = SNPReader()
     data = snp_reader.read_data(tr_file, imputation, master)
     if master:
-        log.info(f'Data contains {data.shape[0]} samples and {data.shape[1]} SNPs.')
-        log.info("")
+        log.info(f"    Data contains {data.shape[0]} samples and {data.shape[1]} SNPs.")
     if tr_pops_f:
         with open(tr_pops_f, 'r') as fb:
             tr_pops = [p.strip() for p in fb.readlines()]
@@ -109,7 +107,8 @@ def initialize_data(master: bool, trX: da.core.Array, tr_pops: Union[str, None]=
         data: The initialized training data.
     """
     if master:
-        log.info("Bringing training data into memory...")
+        log.info("    Bringing data into memory...")
+        log.info("")
     data = trX.compute()
 
     return data, tr_pops
@@ -170,7 +169,7 @@ def write_outputs(Q: np.ndarray, run_name: str, K: int, out_path: str, P: np.nda
     if P is not None:
         np.savetxt(out_path/f"{run_name}.{K}.P", P, delimiter=' ')
     
-    log.info("Q and P matrices saved.")
+    log.info("    Q and P matrices saved.")
     return 
 
 def ddp_setup(stage: str, rank: int, num_gpus: int) -> None:
