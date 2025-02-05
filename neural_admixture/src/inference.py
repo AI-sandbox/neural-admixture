@@ -70,7 +70,8 @@ def main(argv: List[str]):
     
     # LOAD PCA:
     if os.path.exists(pca_file_str):
-        pca_obj = torch.load(pca_file_str, weights_only=True, map_location=device)
+        pca_obj = GPUIncrementalPCA(n_components=int(n_components), batch_size=batch_size, device=device)
+        pca_obj.load_state_dict(torch.load(pca_file_str))
         pca_obj.to(device)
         log.info('PCA loaded.')
         X_pca = pca_obj.transform(data)
