@@ -168,8 +168,9 @@ def write_outputs(Q: np.ndarray, run_name: str, K: int, out_path: str, P: np.nda
     np.savetxt(out_path/f"{run_name}.{K}.Q", Q, delimiter=' ')
     if P is not None:
         np.savetxt(out_path/f"{run_name}.{K}.P", P, delimiter=' ')
-    
-    log.info("    Q and P matrices saved.")
+        log.info("    Q and P matrices saved.")
+    else:
+        log.info("    Q matrix saved.")
     return 
 
 def ddp_setup(stage: str, rank: int, num_gpus: int) -> None:

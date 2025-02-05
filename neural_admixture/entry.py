@@ -65,7 +65,7 @@ def main():
     
     elif sys.argv[1]=='infer':
         from .src import inference
-        log.info('Entering inference...')
+        log.info("    Entering inference...")
         sys.exit(inference.main(arg_list[2:]))
     
     else:
