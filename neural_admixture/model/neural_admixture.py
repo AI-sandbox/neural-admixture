@@ -3,7 +3,6 @@ import sys
 import json
 import torch
 
-from contextlib import nullcontext
 from pathlib import Path
 from typing import Callable, Optional, Tuple
 from tqdm.auto import tqdm
@@ -77,7 +76,7 @@ class Q_P(torch.nn.Module):
             self.return_func = self._return_infer
                 
     def _return_training(self, probs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        return torch.clamp(torch.nn.functional.linear(probs, self.P), 0, 1), probs
+        return torch.clamp_(torch.nn.functional.linear(probs, self.P), 0, 1), probs
     
     def _return_infer(self, probs: torch.Tensor) -> torch.Tensor:
         return probs
