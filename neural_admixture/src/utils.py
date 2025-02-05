@@ -35,7 +35,7 @@ def parse_train_args(argv: List[str]):
     
     parser.add_argument('--activation', required=False, default='relu', type=str, choices=['relu', 'tanh', 'gelu'], help='Activation function for encoder layers.')
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
-    parser.add_argument('--k', required=False, type=int, help='Number of populations/clusters.')
+    parser.add_argument('--k', required=True, type=int, help='Number of populations/clusters.')
     parser.add_argument('--hidden_size', required=False, default=256, type=int, help='Dimension of first projection in encoder.')
     parser.add_argument('--pca_path', required=False, type=str, help='Path containing PCA object, used for plots and to store checkpoints.')
     parser.add_argument('--pca_components', required=False, type=int, default=8, help='Number of components to use for the PCA.')
@@ -140,7 +140,7 @@ def train(initialization: str, device: torch.device, save_dir : str, name: str,
     Returns:
         Tuple[np.ndarray, np.ndarray, torch.nn.Module]: Trained P and Q matrices and the trained model.
     """
-    init_file = f'{name}.pkl'
+    init_file = f'{name}_pca.pt'
     init_path = f'{Path(save_dir) / init_file}'
     switchers = Switchers.get_switchers()
     activation = switchers['activations'][activation_str](0)

@@ -136,7 +136,7 @@ def load_or_compute_pca(path: Optional[str], X: np.ndarray, n_components: int, b
         if path is not None:
             torch.save(pca_obj.cpu(), path)
         if master:
-            log.info(f"           {n_components}D PCA object not found. Performing IncrementalPCA...")
+            log.info(f"            {n_components}D PCA object not found. Performing IncrementalPCA...")
             
     try:
         if path is not None:

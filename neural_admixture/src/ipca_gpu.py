@@ -5,7 +5,7 @@ import torch
 from typing import Optional, Tuple, Union
 import numpy as np
 
-class GPUIncrementalPCA:
+class GPUIncrementalPCA():
     """
     Incremental Principal Component Analysis with GPU Acceleration.
     
@@ -35,7 +35,7 @@ class GPUIncrementalPCA:
     def __init__(self, n_components: Optional[int] = None, *, whiten: bool = False, 
                 copy: bool = True, batch_size: Optional[int] = None, use_fp64: bool = False,
                 device: Optional[Union[str, torch.device]] = torch.device('cpu')):
-        
+                
         # INITILIZE MODEL CHARACTERISTICS:
         self.n_components = n_components
         self.whiten = whiten

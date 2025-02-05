@@ -186,18 +186,13 @@ class NeuralAdmixture():
         self.num_gpus = num_gpus
         self.num_cpus = num_cpus
         self.device = device
-        self.device_type = 'cuda' if 'cuda' in self.device.type else 'cpu'
         self.pin = True if 'cpu' in device_tensors.type else False
-        self.dtype = torch.bfloat16 if 'cuda' in self.device.type else torch.float32
         self.master = master
         
         # Random seed configuration
         self.seed = seed
         self.generator = torch.Generator().manual_seed(self.seed)
-        
-        # Accumulation steps for gradient scaling (if GPUs are used):
-        self.accumulation_steps = 8 / self.num_gpus if self.num_gpus>0 else 8
-        
+                
         # Training configuration:
         self.epochs = epochs
         self.batch_size = batch_size//self.num_gpus if self.num_gpus>0 else batch_size
@@ -390,6 +385,7 @@ class NeuralAdmixture():
             
             log.info("    Results:")
             log.info(f'\n            Fst divergences between estimated populations: (K = {k})')
+            log.info("")
             log.info(f'                \t{header}')
             log.info('            Pop0')
             
@@ -441,7 +437,6 @@ class NeuralAdmixture():
             Fst = mean((p1 - p2)^2) / mean(p1 * (1-p2) + p2 * (1-p1))
         """
         try:
-            # Element-wise operations using PyTorch
             num = torch.mean((pop1 - pop2) ** 2)
             den = torch.mean(pop1 * (1 - pop2) + pop2 * (1 - pop1)) + 1e-7
             return (num / den).item()
