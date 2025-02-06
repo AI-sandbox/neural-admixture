@@ -110,15 +110,15 @@ def load_or_compute_pca(path: Optional[str], X: np.ndarray, n_components: int, b
     try:
         if os.path.exists(path):
             pca_obj = torch.load(path, weights_only=True, map_location=device)
+            assert pca_obj.n_features_in_ == X_original.shape[1], "Computed PCA and training data do not have the same number of features"
             pca_obj.to(device)
             if master:
                 log.info("            PCA loaded.")
             X_pca = pca_obj.transform(X).cpu()
-            assert pca_obj.n_features_in_ == X_original.shape[1], "Computed PCA and training data do not have the same number of features"
         else:
             raise FileNotFoundError
         
-    except (FileNotFoundError, IOError):
+    except (FileNotFoundError, IOError, AssertionError):
         # Optionally reduce the number of rows by sampling for training
         if sample_fraction is not None and 0 < sample_fraction < 1:
             num_rows = X.shape[0]
