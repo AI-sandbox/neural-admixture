@@ -12,7 +12,7 @@ Neural ADMIXTURE is an unsupervised global ancestry inference technique based on
 
 The software can be invoked via CLI and has a similar interface to ADMIXTURE (_e.g._ the output format is completely interchangeable). While the software runs in both CPU and GPU, we recommend using GPUs if available to take advantage of the neural network-based implementation.
 
-![nadm_mna](https://github.com/AI-sandbox/neural-admixture/assets/31998088/048d04e2-8d62-4c14-870f-218e208dacb4)
+![nadm_mna](assets/network_image.JPG)
 
 ## System requirements
 
