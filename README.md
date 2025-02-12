@@ -122,10 +122,10 @@ Basically, if on validation data you are getting single-ancestry estimations whe
 Moreover, note that the initialization method chosen will have no effect, as the supervised method is always used when using the supervised version.
 
 ## Other options
-- `batch_size`: number of samples used at every update. If you have memory issues, try setting a lower batch size. Defaults to 400.
+- `batch_size`: number of samples used at every update. If you have memory issues, try setting a lower batch size. Defaults to 800.
 - `pca_components`: dimension of the PCA projection for the PC-KMeans and PCArchetypal initializations. Defaults to 8.
-- `epochs`: maximum number of times the whole training dataset is used to update the weights. Defaults to 50. 
-- `learning_rate`: dictates how large an update to the weights will be. If you find the loss function oscillating, try setting a lower value. If convergence is slow, try setting a higher value. Defaults to 1e-5.
+- `epochs`: maximum number of times the whole training dataset is used to update the weights. Defaults to 250. 
+- `learning_rate`: dictates how large an update to the weights will be. If you find the loss function oscillating, try setting a lower value. If convergence is slow, try setting a higher value. Defaults to 25e-4.
 - `seed`: RNG seed for replication purposes. Defaults to 42.
 
 ## Using Plink2 binary files (.pgen)
