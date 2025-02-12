@@ -26,7 +26,7 @@ def parse_train_args(argv: List[str]):
                                            description='Rapid population clustering with autoencoders - training mode',
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
     
-    parser.add_argument('--epochs', required=False, type=int, default=285, help='Maximum number of epochs.')
+    parser.add_argument('--epochs', required=False, type=int, default=250, help='Maximum number of epochs.')
     parser.add_argument('--batch_size', required=False, default=800, type=int, help='Batch size.')
     parser.add_argument('--learning_rate', required=False, default=25e-4, type=float, help='Learning rate.')
 
