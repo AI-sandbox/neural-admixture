@@ -295,7 +295,7 @@ class KMeansInitialization(object):
         X_pca, pca_obj = load_or_compute_pca(init_path, data, n_components, 1024, device, name, master, sample_fraction=1)
         te = time.time()
         if master:
-            log.info(f'           PCA initialized in {te-t0} seconds.')
+            log.info(f'            PCA initialized in {te-t0} seconds.')
             log.info("")
 
         n_runs = 10 
@@ -304,6 +304,7 @@ class KMeansInitialization(object):
         
         avg_centers = cls.consensus_clustering(X_pca, K, seeds)
         final_k_means = KMeans(n_clusters=K, init=avg_centers, n_init=1, max_iter=300, random_state=seed)
+        final_k_means.fit(X_pca.numpy())
         
         device_tensors = determine_device_for_tensors(data.shape, K, device)
                     
