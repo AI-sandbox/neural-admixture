@@ -317,7 +317,60 @@ class KMeansInitialization(object):
         P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_pca.shape[1], K, activation, input)
 
         return P, Q, raw_model
-    
+
+class RandomInitialization(object):
+    """
+    Class to initialize a neural admixture model using Gaussian Mixture Models (GMM).
+    """
+    @classmethod
+    def get_decoder_init(cls, epochs: int, batch_size: int, learning_rate: float, K: int, seed: int, init_path: Path, 
+                        name: str, n_components: int, data: np.ndarray, device: torch.device, num_gpus: int, hidden_size: int, 
+                        activation: torch.nn.Module, master: bool, num_cpus: int) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+        """
+        Initializes P and Q matrices and trains a neural admixture model using GMM.
+
+        Args:
+            epochs (int): Number of epochs
+            batch_size (int): Batch size.
+            learning_rate (float): Learning rate.
+            K (int): Number of components (clusters).
+            seed (int): Random seed for reproducibility.
+            init_path (Path): Path to store PCA initialization.
+            name (str): Name identifier for the model.
+            n_components (int): Number of PCA components.
+            data (np.ndarray): Input data array (samples x features).
+            device (torch.device): Device for computation (e.g., CPU or GPU).
+            num_gpus (int): Number of GPUs available.
+            hidden_size (int): Hidden layer size for the model.
+            activation (torch.nn.Module): Activation function.
+            master (bool): Wheter or not this process is the master for printing the output.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]: Initialized P matrix, Q matrix, and trained model.
+        """
+        if master:
+            log.info("    Running Random initialization...")
+            log.info("")
+        t0 = time.time()
+        X_pca, _ = load_or_compute_pca(init_path, data, n_components, 1024, device, name, master, sample_fraction=1)
+        te = time.time()
+        if master:
+            log.info(f"            PCA initialized in {te-t0:.3f} seconds.")
+            log.info("")
+        
+        device_tensors = determine_device_for_tensors(data.shape, K, device)
+
+        indices = np.random.choice(data.shape[0], K, replace=False)
+        P_init = torch.as_tensor(data[indices, :], dtype=torch.float32, device=device).T.contiguous()
+        data = torch.as_tensor(data, dtype=torch.float32, device=device_tensors)
+        input = X_pca.to(device_tensors)
+        
+        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device_tensors, master, num_cpus)
+        
+        P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_pca.shape[1], K, activation, input)
+
+        return P, Q, raw_model
+
 class SupervisedInitialization(object):
     """Supervised initialization
     """

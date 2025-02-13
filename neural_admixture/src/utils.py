@@ -31,7 +31,7 @@ def parse_train_args(argv: List[str]):
     parser.add_argument('--learning_rate', required=False, default=25e-4, type=float, help='Learning rate.')
 
     parser.add_argument('--initialization', required=False, type=str, default = 'gmm',
-                        choices=['kmeans', 'gmm', 'supervised'], help='Q, P initialization.')
+                        choices=['kmeans', 'gmm', 'supervised', 'random'], help='P initialization.')
     
     parser.add_argument('--activation', required=False, default='relu', type=str, choices=['relu', 'tanh', 'gelu'], help='Activation function for encoder layers.')
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
