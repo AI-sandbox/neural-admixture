@@ -3,6 +3,7 @@ import logging
 import random
 import os
 import sys
+import socket
 import numpy as np
 import torch
 import dask.array as da
@@ -173,6 +174,15 @@ def write_outputs(Q: np.ndarray, run_name: str, K: int, out_path: str, P: np.nda
         log.info("    Q matrix saved.")
     return 
 
+def find_free_port(start_port=12355):
+    """ Find a free port starting from a given port number. """
+    port = start_port
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(("localhost", port)) != 0:
+                return port
+            port += 1
+
 def ddp_setup(stage: str, rank: int, num_gpus: int) -> None:
     """
     Initialize or destroy the Distributed Data Parallel (DDP) process group.
@@ -187,7 +197,7 @@ def ddp_setup(stage: str, rank: int, num_gpus: int) -> None:
     if num_gpus>1:
         if stage == 'begin':
             os.environ["MASTER_ADDR"] = "localhost"
-            os.environ["MASTER_PORT"] = "12355"
+            os.environ["MASTER_PORT"] = str(find_free_port(12355))
             torch.cuda.set_device(rank)
             torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=num_gpus)
         else:
