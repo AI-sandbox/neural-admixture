@@ -2,6 +2,8 @@ import dask.array as da
 import logging
 import numpy as np
 import sys
+from math import ceil
+from .utils_c import utils
 
 from pathlib import Path
 from typing import Tuple
@@ -29,22 +31,6 @@ class SNPReader:
         calldata = f_tr["calldata/GT"]
         return np.sum(calldata, axis=2).T/2
     
-    def _read_hdf5(self, file: str, master: bool) -> np.ndarray:
-        """Reader wrapper for HDF5 files. HDF5 should directly contain the averaged genotype array
-
-        Args:
-            file (str): path to file.
-            master (bool): Wheter or not this process is the master for printing the output.
-
-        Returns:
-            np.ndarray: averaged genotype array of shape (n_samples, n_snps)
-        """
-        if master:
-            log.info("    Input format is HDF5.")
-        import h5py
-        f_tr = h5py.File(file, 'r')
-        return f_tr['snps']
-    
     def _read_bed(self, file: str, master: bool) -> da.core.Array:
         """Reader wrapper for BED files
 
@@ -57,9 +43,27 @@ class SNPReader:
         """
         if master:
             log.info("    Input format is BED.")
-        from pandas_plink import read_plink
-        _, _, G = read_plink(str(Path(file).with_suffix("")))
-        return (G.T/2)
+
+        file_path = Path(file)
+        fam_file = file_path.with_suffix(".fam")
+        bed_file = file_path.with_suffix(".bed")
+        
+        with open(fam_file, "r") as fam:
+            N = sum(1 for _ in fam)
+        N_bytes = ceil(N / 4)
+        
+        with open(bed_file, "rb") as bed:
+            B = np.fromfile(bed, dtype=np.uint8, offset=3)
+        
+        assert (B.shape[0] % N_bytes) == 0, "bim file doesn't match!"
+        M = B.shape[0] // N_bytes
+        B.shape = (M, N_bytes)
+        
+        q_nrm = np.zeros(N)
+        G = np.zeros((M, N), dtype=np.uint8)
+        utils.expandGeno(B, G, q_nrm)
+        del B
+        return G, q_nrm
     
     def _read_pgen(self, file: str, master: bool) -> np.ndarray:
         """Reader wrapper for PGEN files
@@ -122,7 +126,7 @@ class SNPReader:
         elif '.h5' in file_extensions or '.hdf5' in file_extensions:
             G = self._read_hdf5(file, master)
         elif '.bed' in file_extensions:
-            G = self._read_bed(file, master)
+            G, q_nrm = self._read_bed(file, master)
         elif '.pgen' in file_extensions:
             G = self._read_pgen(file, master)
         elif '.npy' in file_extensions:
@@ -131,43 +135,4 @@ class SNPReader:
             if master:
                 log.error("    Invalid format. Unrecognized file format. Make sure file ends with .vcf | .vcf.gz | .bed | .pgen | .h5 | .hdf5 | .npy")
             sys.exit(1)
-        if isinstance(G, np.ndarray):
-            G = da.from_array(G)
-        G = self._impute(G, master, imputation)
-        if master:
-            if not (int(G.min().compute()) == 0 and int(G.max().compute()) == 1):
-                raise AssertionError("    Only biallelic SNPs are supported. Please make sure multiallelic sites have been removed.")
-        return G if G.mean().compute() < 0.5 else 1-G
-
-    @staticmethod
-    def _impute(G: da.core.Array, master: bool, method: str = "mean") -> Tuple[da.core.Array, da.core.Array]:
-        """Impute missing values and return imputed array and positions.
-
-        Args:
-            G (da.core.Array): Genotype array.
-            method (str, optional): Imputation method ('zero', 'mean'). Defaults to 'mean'.
-            master (bool): Wheter or not this process is the master for printing the output.
-
-        Returns:
-            da.core.Array: Imputed genotype array.
-            da.core.Array: Dask array of imputed positions (1 for imputed, 0 otherwise).
-        """
-        G = da.where(G == -1, np.nan, G)
-        mask = da.isnan(G)
-        valid_columns_mask = ~da.all(mask, axis=0).compute()
-        G = G[:, valid_columns_mask]
-        mask = mask[:, valid_columns_mask]
-        if mask.any().compute():
-            if master:
-                log.warning(f"    Data contains missing values. Will perform {method}-imputation.")
-            if method == "zero":
-                G_imputed = da.where(mask, 0., G)
-            elif method == "mean":
-                G_imputed = da.where(mask, da.nanmean(G, axis=0), G)
-            else:
-                if master:
-                    raise ValueError("    Invalid imputation method. Only 'zero' and 'mean' are supported.")
-        else:
-            G_imputed = G
-    
-        return G_imputed 
+        return (G if G.mean() < 1 else 2 - G), q_nrm

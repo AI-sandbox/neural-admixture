@@ -11,28 +11,28 @@ class Switchers(object):
     }
 
     _initializations = {
-        'kmeans': lambda epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, device, 
+        'kmeans': lambda epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
                     num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight: 
             
-            init.KMeansInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, device, 
+            init.KMeansInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
                                                 num_gpus, hidden_size, activation, master, num_cpus),
 
-        'gmm': lambda epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, device, 
+        'gmm': lambda epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
                     num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight: 
             
-            init.GMMInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, device, 
+            init.GMMInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
                                                 num_gpus, hidden_size, activation, master, num_cpus),
         
-        'random': lambda epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, device, 
+        'random': lambda epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
                     num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight: 
             
-            init.RandomInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, device, 
+            init.RandomInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
                                                 num_gpus, hidden_size, activation, master, num_cpus),
         
-        'supervised': lambda epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, device, 
+        'supervised': lambda epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
                     num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight: 
             
-            init.SupervisedInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, device, 
+            init.SupervisedInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
                                                 num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight),
     }
 

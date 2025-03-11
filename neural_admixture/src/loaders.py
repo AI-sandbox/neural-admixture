@@ -59,7 +59,7 @@ def dataloader_inference(input: torch.Tensor, batch_size: int, seed: int, genera
     return dataloader
     
 
-# P2 DATASET:
+# DATASET:
 class Dataset_train(Dataset):
     """
     Dataset for phase 2 of Neural Admixture.
@@ -93,7 +93,7 @@ class Dataset_train(Dataset):
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: A tuple containing `batch_X` and `batch_input` tensors.
         """
-        batch_X = self.X[idx]
+        batch_X = self.X[idx].to(torch.float32) / 2
         batch_input = self.input[idx]
         batch_y = self.y[idx]
         return batch_X, batch_input, batch_y

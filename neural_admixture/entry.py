@@ -1,7 +1,9 @@
 import logging
 import sys
+import os
 import torch
 import torch.multiprocessing as mp
+
 from ._version import __version__
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
@@ -42,6 +44,27 @@ def main():
     
     assert len(arg_list) > 1, 'Please provide either the argument "train" or "infer" to choose running mode.'
     
+    # CONTROL NUMBER OF THREADS:
+    if '--num_cpus' in arg_list:
+        num_cpus_index = arg_list.index('--num_cpus') + 1
+        if num_cpus_index < len(arg_list):
+            num_cpus = int(arg_list[num_cpus_index])
+            num_threads = num_cpus//2
+    else:
+        num_threads = 1
+    
+    os.environ["MKL_NUM_THREADS"] = str(num_threads)
+    os.environ["MKL_MAX_THREADS"] = str(num_threads)
+    os.environ["OMP_NUM_THREADS"] = str(num_threads)
+    os.environ["OMP_MAX_THREADS"] = str(num_threads)
+    os.environ["NUMEXPR_NUM_THREADS"] = str(num_threads)
+    os.environ["NUMEXPR_MAX_THREADS"] = str(num_threads)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(num_threads)
+    os.environ["OPENBLAS_MAX_THREADS"] = str(num_threads)
+    
+    log.info(f"    There are {num_cpus} CPU's available for this execution. Hence, using {num_threads} threads.")
+
+    # CONTROL NUMBER OF DEVICES:
     num_gpus = 0
     if '--num_gpus' in arg_list:
         num_gpus_index = arg_list.index('--num_gpus') + 1
@@ -53,6 +76,7 @@ def main():
         log.warning(f"    Requested {num_gpus} GPUs, but only {max_devices} are available. Using {max_devices} GPUs.")
         num_gpus = max_devices
     
+    # BEGIN TRAIN OF INFERENCE:
     if sys.argv[1]=='train':
         from .src import train
 

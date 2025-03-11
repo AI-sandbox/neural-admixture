@@ -203,7 +203,7 @@ class NeuralAdmixture():
         self.loss_function_supervised = torch.nn.CrossEntropyLoss(reduction='sum')
         
     def initialize_model(self, p_tensor: torch.Tensor, hidden_size: int, num_features: int, 
-                         k: int, activation: torch.nn.Module, num_total_elements: int) -> None:
+                         k: int, activation: torch.nn.Module) -> None:
         """
         Initializes the Q_P model and sets up distributed training if applicable.
 
@@ -249,7 +249,7 @@ class NeuralAdmixture():
         #SETUP:
         torch.set_float32_matmul_precision('medium')
         torch.set_flush_denormal(True)
-        self.initialize_model(P, hidden_size, num_features, k, activation, data.shape[0])
+        self.initialize_model(P, hidden_size, num_features, k, activation)
         if y is None:
             y = torch.zeros(data.size(0))
             run_epoch = self._run_epoch
@@ -416,7 +416,6 @@ class NeuralAdmixture():
         Details:
             - Computes and logs the log-likelihood of the model given the data.
         """
-        self._loglikelihood(Q.cpu(), self.raw_model.P.data.detach().cpu().T, data.cpu(), self.master)
         
         return self.raw_model.P.data.detach().cpu().numpy(), Q.cpu().numpy(), self.raw_model
     
@@ -460,10 +459,9 @@ class NeuralAdmixture():
             assert reduction in ("mean", "sum"), "reduction argument should be either 'mean' or 'sum'"
             
             rec = torch.clamp(torch.matmul(Q, P), eps, 1 - eps)
-            rec_2 = torch.clamp(torch.matmul(Q, (1 - P)), eps, 1 - eps)
-            data = torch.clamp(data * 2, eps, 2 - eps)
+            data = torch.clamp(data, eps, 2 - eps)
 
-            loglikelihood = data * torch.log(rec) + (2 - data) * torch.log(rec_2)
+            loglikelihood = data * torch.log(rec) + (2 - data) * torch.log1p(-rec)
             
             if reduction == "sum":
                 result = torch.sum(loglikelihood)

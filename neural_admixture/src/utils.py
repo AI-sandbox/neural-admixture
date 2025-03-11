@@ -12,7 +12,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import List, Tuple
 
 from .snp_reader import SNPReader
 from ..model.switchers import Switchers
@@ -27,9 +27,9 @@ def parse_train_args(argv: List[str]):
                                            description='Rapid population clustering with autoencoders - training mode',
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
     
-    parser.add_argument('--epochs', required=False, type=int, default=250, help='Maximum number of epochs.')
+    parser.add_argument('--epochs', required=False, type=int, default=350, help='Maximum number of epochs.')
     parser.add_argument('--batch_size', required=False, default=800, type=int, help='Batch size.')
-    parser.add_argument('--learning_rate', required=False, default=25e-4, type=float, help='Learning rate.')
+    parser.add_argument('--learning_rate', required=False, default=4e-3, type=float, help='Learning rate.')
 
     parser.add_argument('--initialization', required=False, type=str, default = 'gmm',
                         choices=['kmeans', 'gmm', 'supervised', 'random'], help='P initialization.')
@@ -37,7 +37,7 @@ def parse_train_args(argv: List[str]):
     parser.add_argument('--activation', required=False, default='relu', type=str, choices=['relu', 'tanh', 'gelu'], help='Activation function for encoder layers.')
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
     parser.add_argument('--k', required=True, type=int, help='Number of populations/clusters.')
-    parser.add_argument('--hidden_size', required=False, default=256, type=int, help='Dimension of first projection in encoder.')
+    parser.add_argument('--hidden_size', required=False, default=1024, type=int, help='Dimension of first projection in encoder.')
     parser.add_argument('--pca_path', required=False, type=str, help='Path containing PCA object, used for plots and to store checkpoints.')
     parser.add_argument('--pca_components', required=False, type=int, default=8, help='Number of components to use for the PCA.')
     parser.add_argument('--save_dir', required=True, type=str, help='Save model in this directory')
@@ -86,37 +86,19 @@ def read_data(tr_file: str, master: bool, tr_pops_f: str=None, imputation: str='
         da.core.Array: A Dask array containing the SNP data.
     """
     snp_reader = SNPReader()
-    data = snp_reader.read_data(tr_file, imputation, master)
+    data, q_nrm = snp_reader.read_data(tr_file, imputation, master)
     if master:
-        log.info(f"    Data contains {data.shape[0]} samples and {data.shape[1]} SNPs.")
+        log.info(f"    Data contains {data.shape[1]} samples and {data.shape[0]} SNPs.")
     if tr_pops_f:
         with open(tr_pops_f, 'r') as fb:
             tr_pops = [p.strip() for p in fb.readlines()]
-        return data, tr_pops
+        return data, tr_pops, q_nrm
     
-    return data, None
-
-def initialize_data(master: bool, trX: da.core.Array, tr_pops: Union[str, None]=None) -> np.ndarray:
-    """
-    Initialize data.
-
-    Args:
-        master (bool): Wheter or not this process is the master for printing the output.
-        trX: The training data.
-
-    Returns:
-        data: The initialized training data.
-    """
-    if master:
-        log.info("    Bringing data into memory...")
-        log.info("")
-    data = trX.compute()
-
-    return data, tr_pops
+    return data, None, q_nrm
 
 def train(initialization: str, device: torch.device, save_dir : str, name: str, 
         k: int, seed: int, n_components: int, epochs: int, batch_size: int, learning_rate: float, 
-        data: np.ndarray, num_gpus: int, activation_str: str, hidden_size: int, master: bool, num_cpus: int,
+        data: np.ndarray, q_nrm, num_gpus: int, activation_str: str, hidden_size: int, master: bool, num_cpus: int,
         y: str, supervised_loss_weight: float) -> Tuple[np.ndarray, np.ndarray, torch.nn.Module]:
     """
     Train the model using specified initialization, hyperparameters, and data.
@@ -146,7 +128,7 @@ def train(initialization: str, device: torch.device, save_dir : str, name: str,
     switchers = Switchers.get_switchers()
     activation = switchers['activations'][activation_str](0)
     P, Q, model = switchers['initializations'][initialization](
-        epochs, batch_size, learning_rate, k, seed, init_path, name, n_components, data, device, 
+        epochs, batch_size, learning_rate, k, seed, init_path, name, n_components, data, q_nrm, device, 
         num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight)
     
     return P, Q, model
