@@ -6,7 +6,6 @@ import sys
 import socket
 import numpy as np
 import torch
-import dask.array as da
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -27,27 +26,21 @@ def parse_train_args(argv: List[str]):
                                            description='Rapid population clustering with autoencoders - training mode',
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
     
-    parser.add_argument('--epochs', required=False, type=int, default=350, help='Maximum number of epochs.')
+    parser.add_argument('--epochs', required=False, type=int, default=450, help='Maximum number of epochs.')
     parser.add_argument('--batch_size', required=False, default=800, type=int, help='Batch size.')
     parser.add_argument('--learning_rate', required=False, default=4e-3, type=float, help='Learning rate.')
 
-    parser.add_argument('--initialization', required=False, type=str, default = 'gmm',
-                        choices=['kmeans', 'gmm', 'supervised', 'random'], help='P initialization.')
+    parser.add_argument('--initialization', required=False, type=str, default = 'random',
+                        choices=['random'], help='P initialization.')
     
     parser.add_argument('--activation', required=False, default='relu', type=str, choices=['relu', 'tanh', 'gelu'], help='Activation function for encoder layers.')
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
     parser.add_argument('--k', required=True, type=int, help='Number of populations/clusters.')
     parser.add_argument('--hidden_size', required=False, default=1024, type=int, help='Dimension of first projection in encoder.')
-    parser.add_argument('--pca_path', required=False, type=str, help='Path containing PCA object, used for plots and to store checkpoints.')
-    parser.add_argument('--pca_components', required=False, type=int, default=8, help='Number of components to use for the PCA.')
+    parser.add_argument('--n_components', required=False, type=int, default=8, help='Number of components to use for the random projection.')
     parser.add_argument('--save_dir', required=True, type=str, help='Save model in this directory')
     parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data')
     parser.add_argument('--name', required=True, type=str, help='Experiment/model name')
-    parser.add_argument('--imputation', type=str, default='mean', choices=['mean', 'zero'], help='Imputation method for missing data (zero or mean)')
-    
-    parser.add_argument('--supervised_loss_weight', required=False, default=100, type=float, help='Weight given to the supervised loss')
-    parser.add_argument('--populations_path', required=False, default='', type=str, help='Path containing the main data populations')
-    parser.add_argument('--supervised', action='store_true', default=False, help='If specified, will run the supervised version')
     
     parser.add_argument('--num_gpus', required=False, default=0, type=int, help='Number of GPUs to be used in the execution.')
     parser.add_argument('--num_cpus', required=False, default=1, type=int, help='Number of CPUs to be used in the execution.')
@@ -72,7 +65,7 @@ def parse_infer_args(argv: List[str]):
 
     return parser.parse_args(argv)
 
-def read_data(tr_file: str, master: bool, tr_pops_f: str=None, imputation: str='mean') -> da.core.Array:
+def read_data(tr_file: str, master: bool) -> np.ndarray:
     """
     Reads SNP data from a file and applies imputation if specified..
 
@@ -86,20 +79,15 @@ def read_data(tr_file: str, master: bool, tr_pops_f: str=None, imputation: str='
         da.core.Array: A Dask array containing the SNP data.
     """
     snp_reader = SNPReader()
-    data, q_nrm = snp_reader.read_data(tr_file, imputation, master)
+    data, has_missing = snp_reader.read_data(tr_file, master)
     if master:
         log.info(f"    Data contains {data.shape[1]} samples and {data.shape[0]} SNPs.")
-    if tr_pops_f:
-        with open(tr_pops_f, 'r') as fb:
-            tr_pops = [p.strip() for p in fb.readlines()]
-        return data, tr_pops, q_nrm
-    
-    return data, None, q_nrm
+   
+    return data, has_missing
 
-def train(initialization: str, device: torch.device, save_dir : str, name: str, 
-        k: int, seed: int, n_components: int, epochs: int, batch_size: int, learning_rate: float, 
-        data: np.ndarray, q_nrm, num_gpus: int, activation_str: str, hidden_size: int, master: bool, num_cpus: int,
-        y: str, supervised_loss_weight: float) -> Tuple[np.ndarray, np.ndarray, torch.nn.Module]:
+def train(initialization: str, device: torch.device, k: int, seed: int, n_components: int, epochs: int, batch_size: int, learning_rate: float, 
+        data: np.ndarray, num_gpus: int, activation_str: str, hidden_size: int, master: bool, num_cpus: int,
+        has_missing: bool) -> Tuple[np.ndarray, np.ndarray, torch.nn.Module]:
     """
     Train the model using specified initialization, hyperparameters, and data.
 
@@ -123,13 +111,11 @@ def train(initialization: str, device: torch.device, save_dir : str, name: str,
     Returns:
         Tuple[np.ndarray, np.ndarray, torch.nn.Module]: Trained P and Q matrices and the trained model.
     """
-    init_file = f'{name}_pca.pt'
-    init_path = f'{Path(save_dir) / init_file}'
     switchers = Switchers.get_switchers()
     activation = switchers['activations'][activation_str](0)
     P, Q, model = switchers['initializations'][initialization](
-        epochs, batch_size, learning_rate, k, seed, init_path, name, n_components, data, q_nrm, device, 
-        num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight)
+        epochs, batch_size, learning_rate, k, seed, n_components, data, device, 
+        num_gpus, hidden_size, activation, master, num_cpus, has_missing)
     
     return P, Q, model
 

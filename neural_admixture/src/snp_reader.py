@@ -31,7 +31,7 @@ class SNPReader:
         calldata = f_tr["calldata/GT"]
         return np.sum(calldata, axis=2).T/2
     
-    def _read_bed(self, file: str, master: bool) -> da.core.Array:
+    def _read_bed(self, file: str, master: bool) -> np.ndarray:
         """Reader wrapper for BED files
 
         Args:
@@ -59,11 +59,11 @@ class SNPReader:
         M = B.shape[0] // N_bytes
         B.shape = (M, N_bytes)
         
-        q_nrm = np.zeros(N)
         G = np.zeros((M, N), dtype=np.uint8)
-        utils.expandGeno(B, G, q_nrm)
+        utils.expandGeno(B, G)
         del B
-        return G, q_nrm
+        has_missing = bool(np.any(G == 9))
+        return G, has_missing
     
     def _read_pgen(self, file: str, master: bool) -> np.ndarray:
         """Reader wrapper for PGEN files
@@ -109,7 +109,7 @@ class SNPReader:
             return calldata/2
         return np.nan_to_num(calldata, nan=0.).sum(axis=2)/2
     
-    def read_data(self, file: str, imputation: str, master: bool) -> da.core.Array:
+    def read_data(self, file: str, master: bool) -> np.ndarray:
         """Wrapper of readers
 
         Args:
@@ -121,18 +121,11 @@ class SNPReader:
             da.core.Array: averaged genotype Dask array of shape (n_samples, n_snps)
         """
         file_extensions = Path(file).suffixes
-        if '.vcf' in file_extensions:
-            G = self._read_vcf(file, master)
-        elif '.h5' in file_extensions or '.hdf5' in file_extensions:
-            G = self._read_hdf5(file, master)
-        elif '.bed' in file_extensions:
-            G, q_nrm = self._read_bed(file, master)
-        elif '.pgen' in file_extensions:
-            G = self._read_pgen(file, master)
-        elif '.npy' in file_extensions:
-            G = self._read_npy(file, master)
+
+        if '.bed' in file_extensions:
+            G, has_missing = self._read_bed(file, master)
         else:
             if master:
-                log.error("    Invalid format. Unrecognized file format. Make sure file ends with .vcf | .vcf.gz | .bed | .pgen | .h5 | .hdf5 | .npy")
+                log.error("    Invalid format. Unrecognized file format. Make sure file ends with .bed")
             sys.exit(1)
-        return (G if G.mean() < 1 else 2 - G), q_nrm
+        return (G if G.mean() < 1 else 2 - G), has_missing

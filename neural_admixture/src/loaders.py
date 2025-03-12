@@ -6,8 +6,8 @@ from torch.utils.data.distributed import DistributedSampler
 from typing import Tuple, Union, List, Generator
 
 # DATALOADER:
-def dataloader_train(X: torch.Tensor, input: torch.Tensor, batch_size: int, num_gpus: int, seed: int, 
-                generator: torch.Generator, pin: bool, y: torch.Tensor, num_cpus: int) -> Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]:
+def dataloader_train(X: torch.Tensor, input: torch.Tensor, f: torch.Tensor, batch_size: int, num_gpus: int, seed: int, 
+                generator: torch.Generator, pin: bool, num_cpus: int) -> Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]:
     """
     Creates a DataLoader with batch sampler or distributed sampler for the phase 2.
 
@@ -23,7 +23,7 @@ def dataloader_train(X: torch.Tensor, input: torch.Tensor, batch_size: int, num_
     Returns:
     - Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]: DataLoader object and the used sampler.
     """
-    dataset = Dataset_train(X, input, y)
+    dataset = Dataset_train(X, input, f)
     if num_gpus > 1:
         sampler = DistributedSampler(dataset, shuffle=True, seed=seed)
         dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, collate_fn=collate_fn_train, pin_memory=pin)
@@ -68,7 +68,7 @@ class Dataset_train(Dataset):
             X (torch.Tensor): The main data tensor.
             input (torch.Tensor): The input tensor associated with the data.
     """
-    def __init__(self, X: torch.Tensor, input: torch.Tensor, y: torch.Tensor):
+    def __init__(self, X: torch.Tensor, input: torch.Tensor, f: torch.Tensor):
         """
         Args:
             X (torch.Tensor): The main data tensor.
@@ -76,7 +76,11 @@ class Dataset_train(Dataset):
         """
         self.X = X
         self.input= input
-        self.y = y
+        self.f = f
+        if self.f is None:
+            self.transform = lambda batch_X: batch_X
+        else:
+            self.transform = lambda batch_X: torch.where(batch_X == 4.5, self.f[:, None], batch_X)
         
     def __len__(self) -> int:
         """
@@ -93,10 +97,9 @@ class Dataset_train(Dataset):
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: A tuple containing `batch_X` and `batch_input` tensors.
         """
-        batch_X = self.X[idx].to(torch.float32) / 2
+        batch_X = self.transform(self.X[idx].to(torch.float32) / 2)
         batch_input = self.input[idx]
-        batch_y = self.y[idx]
-        return batch_X, batch_input, batch_y
+        return batch_X, batch_input
 
 def collate_fn_train(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor]:
     """
@@ -109,11 +112,10 @@ def collate_fn_train(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[to
         Tuple[torch.Tensor, torch.Tensor]: Two stacked tensors. The first contains the `batch_X` tensors, 
         and the second contains the `batch_input` tensors.
     """
-    batch_X, batch_input, batch_y = zip(*batch)
+    batch_X, batch_input = zip(*batch)
     batch_X = torch.stack(batch_X)
     batch_input = torch.stack(batch_input)
-    batch_y = torch.stack(batch_y)
-    return batch_X, batch_input, batch_y
+    return batch_X, batch_input
 
 
 # INFERENCE DATASET:

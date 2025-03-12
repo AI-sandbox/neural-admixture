@@ -163,7 +163,7 @@ class NeuralAdmixture():
             device_tensors (torch.device): Device for tensor data.
     """
     def __init__(self, k: int, epochs: int, batch_size: int, learning_rate: float, device: torch.device, seed: int, num_gpus: int,
-                device_tensors: torch.device, master: bool, num_cpus: int, supervised_loss_weight: Optional[float]=None):
+                device_tensors: torch.device, master: bool, num_cpus: int):
         """
         Initializes the NeuralAdmixture class with training parameters and settings.
 
@@ -198,10 +198,6 @@ class NeuralAdmixture():
         self.loss_function = torch.nn.BCELoss(reduction='sum')
         self.lr = learning_rate
         
-        # Supervised version:
-        self.supervised_loss_weight = supervised_loss_weight
-        self.loss_function_supervised = torch.nn.CrossEntropyLoss(reduction='sum')
-        
     def initialize_model(self, p_tensor: torch.Tensor, hidden_size: int, num_features: int, 
                          k: int, activation: torch.nn.Module) -> None:
         """
@@ -228,8 +224,7 @@ class NeuralAdmixture():
             self.raw_model = self.base_model
                 
     def launch_training(self, P: torch.Tensor, data: torch.Tensor, hidden_size:int, num_features:int, 
-                        k:int, activation: torch.nn.Module, input: torch.Tensor,
-                        y: Optional[torch.Tensor]=None) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+                        k:int, activation: torch.nn.Module, input: torch.Tensor, f: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Launches the training process, which includes two distinct phases and the inference step to compute Q.
 
@@ -250,21 +245,16 @@ class NeuralAdmixture():
         torch.set_float32_matmul_precision('medium')
         torch.set_flush_denormal(True)
         self.initialize_model(P, hidden_size, num_features, k, activation)
-        if y is None:
-            y = torch.zeros(data.size(0))
-            run_epoch = self._run_epoch
-        else:
-            run_epoch = self._run_epoch_supervised
-            
+
         #TRAINING:
         if self.master:
             log.info("")
             log.info("    Starting training...")
             log.info("")
         self.optimizer = self.raw_model.create_custom_adam(self.lr)
-        dataloader = dataloader_train(data, input, self.batch_size, self.num_gpus, self.seed, self.generator, self.pin, y, self.num_cpus)
+        dataloader = dataloader_train(data, input, f, self.batch_size, self.num_gpus, self.seed, self.generator, self.pin, self.num_cpus)
         for epoch in tqdm(range(self.epochs), desc="Epochs", file=sys.stderr):
-            run_epoch(epoch, dataloader)
+            self._run_epoch(epoch, dataloader)
 
         #INFERENCE OF Q's:
         batch_size_inference_Q = min(data.shape[0], 5000)
@@ -287,17 +277,17 @@ class NeuralAdmixture():
             
         #RETURN OUTPUT:
         self.display_divergences(self.k)
-        return self.process_results(data, Q)
+        return self.process_results(Q)
 
     def _run_epoch(self, epoch, dataloader: torch.utils.data.DataLoader):
         """
-        Executes one epoch of training for Phase 2.
+        Executes one epoch of training.
         
         Args:
-            dataloader (Dataloader): Dataloader of phase 2.
+            dataloader (Dataloader): Dataloader.
         """
         loss_acc = 0
-        for X, input_step, _ in dataloader:
+        for X, input_step in dataloader:
             X = X.to(self.device, non_blocking=self.pin)
             input_step = input_step.to(self.device, non_blocking=self.pin)
             
@@ -313,7 +303,7 @@ class NeuralAdmixture():
         
     def _run_step(self, X: torch.Tensor,  input_step: torch.Tensor) -> torch.Tensor:
         """
-        Executes one training step for Phase 2.
+        Executes one training step.
 
         Args:
             X (torch.Tensor): Batch of X data.
@@ -325,46 +315,6 @@ class NeuralAdmixture():
         self.optimizer.zero_grad(set_to_none=True)
         recs, _ = self.model(input_step)
         loss = self.loss_function(recs, X)
-        return loss
-    
-    def _run_epoch_supervised(self, epoch, dataloader: torch.utils.data.DataLoader):
-        """
-        Executes one epoch of training for Phase 2 (supervised version).
-        
-        Args:
-            dataloader (Dataloader): Dataloader of phase 2.
-        """
-        loss_acc = 0
-        for X, input_step, y in dataloader:
-            X = X.to(self.device, non_blocking=self.pin)
-            input_step = input_step.to(self.device, non_blocking=self.pin)
-            
-            loss = self._run_step_supervised(X, input_step, y)
-            loss.backward()
-            self.optimizer.step()
-            self.raw_model.restrict_P()
-            
-            loss_acc += loss.item()
-        
-        if epoch%25==0:
-            log.info(f"            Loss in epoch {epoch:3d} on device {self.device} is {int(loss_acc):,.0f}")
-            
-    def _run_step_supervised(self, X: torch.Tensor,  input_step: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        """
-        Executes one training step for Phase 2.
-
-        Args:
-            X (torch.Tensor): Batch of X data.
-            input_step (torch.Tensor): Batch of input data.
-
-        Returns:
-            torch.Tensor: Computed loss for the batch.
-        """
-        self.optimizer.zero_grad(set_to_none=True)
-        recs, probs = self.model(input_step)
-        loss = self.loss_function(recs, X)
-        mask = y > -1
-        loss += self.supervised_loss_weight*self.loss_function_supervised(probs[mask], y[mask])
         return loss
     
     def display_divergences(self, k) -> None:
@@ -401,8 +351,7 @@ class NeuralAdmixture():
             
             log.info("\n")
 
-    
-    def process_results(self, data: torch.Tensor, Q: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+    def process_results(self, Q: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Processes and logs final results after training.
 
@@ -441,33 +390,3 @@ class NeuralAdmixture():
         except Exception as e:
             log.info(f"            Error computing Hudson's Fst: {e}")
             return float('nan')
-        
-    @staticmethod
-    def _loglikelihood(Q: torch.Tensor, P: torch.Tensor, data: torch.Tensor,
-                      master: bool, eps: float = 1e-7, reduction: str = "sum") -> None:
-        """Compute deviance for a single K using PyTorch tensors
-
-        Args:
-            Q (torch.Tensor): Matrix Q.
-            P (torch.Tensor): Matrix P.
-            data (torch.Tensor): original data.
-            mask (torch.Tensor): mask tensor.
-            eps (float, optional): epsilon term to avoid numerical errors. Defaults to 1e-7.
-            reduction (str, optional): reduction method. Should be either 'mean' or 'sum'. Defaults to 'sum'.
-        """
-        if master:
-            assert reduction in ("mean", "sum"), "reduction argument should be either 'mean' or 'sum'"
-            
-            rec = torch.clamp(torch.matmul(Q, P), eps, 1 - eps)
-            data = torch.clamp(data, eps, 2 - eps)
-
-            loglikelihood = data * torch.log(rec) + (2 - data) * torch.log1p(-rec)
-            
-            if reduction == "sum":
-                result = torch.sum(loglikelihood)
-            elif reduction == "mean":
-                result = torch.mean(loglikelihood)
-            
-            log.info(f"            Log likelihood: {result.item():,.0f}")
-            log.info("\n")
-            return

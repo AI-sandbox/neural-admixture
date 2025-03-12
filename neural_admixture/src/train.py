@@ -15,27 +15,26 @@ from . import utils
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
-def fit_model(args: argparse.Namespace, trX: da.core.Array, q_nrm, device: torch.device, num_gpus: int,
-              tr_pops: str, master: bool) -> None:
+def fit_model(args: argparse.Namespace, trX: da.core.Array, device: torch.device, num_gpus: int,
+            master: bool, has_missing: bool) -> None:
     """Wrapper function to start training
     """
     (epochs, batch_size, learning_rate, save_dir, activation_str, hidden_size, initialization, 
-    n_components, name, seed, supervised_loss_weight, num_cpus) = (int(args.epochs), int(args.batch_size), float(args.learning_rate), args.save_dir, 
-                                args.activation, int(args.hidden_size), args.initialization if not bool(args.supervised) else 'supervised', 
-                                int(args.pca_components), args.name, int(args.seed), float(args.supervised_loss_weight), int(args.num_cpus))
+    n_components, name, seed, num_cpus) = (int(args.epochs), int(args.batch_size), float(args.learning_rate), args.save_dir, 
+                                args.activation, int(args.hidden_size), args.initialization, 
+                                int(args.n_components), args.name, int(args.seed), int(args.num_cpus))
         
     utils.set_seed(seed)
     
     K = int(args.k)
-    P, Q, model = utils.train(initialization, device, save_dir, name, K, seed, n_components, epochs, batch_size, learning_rate, trX, q_nrm, num_gpus, 
-                            activation_str, hidden_size, master, num_cpus, tr_pops, supervised_loss_weight)
+    P, Q, model = utils.train(initialization, device, K, seed, n_components, epochs, batch_size, learning_rate, trX, num_gpus, 
+                            activation_str, hidden_size, master, num_cpus, has_missing)
     if master:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
         save_path = f'{save_dir}/{name}.pt'
         state_dict = {key: value for key, value in model.state_dict().items() if key != 'P'}
         torch.save(state_dict, save_path)
         model.save_config(name, save_dir)
-        
         utils.write_outputs(Q, name, K, save_dir, P)
 
     return
@@ -105,12 +104,12 @@ def main(rank: int, argv: List[str], num_gpus):
             Path(args.save_dir).mkdir(parents=True, exist_ok=True)
         
         t0 = time.time()
-        trX, tr_pops, q_nrm = utils.read_data(args.data_path, master, args.populations_path, args.imputation)
+        trX, has_missing = utils.read_data(args.data_path, master)
 
         #if args.cv is not None:
         #    perform_cross_validation(args, trX, device, num_gpus, master)   
         
-        fit_model(args, trX, q_nrm, device, num_gpus, tr_pops, master)
+        fit_model(args, trX, device, num_gpus, master, has_missing)
         
         if master:
             t1 = time.time()

@@ -11,30 +11,12 @@ class Switchers(object):
     }
 
     _initializations = {
-        'kmeans': lambda epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
-                    num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight: 
+        'random': lambda epochs, batch_size, learning_rate, K, seed, n_components, data, device, 
+                    num_gpus, hidden_size, activation, master, num_cpus, has_missing: 
             
-            init.KMeansInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
-                                                num_gpus, hidden_size, activation, master, num_cpus),
-
-        'gmm': lambda epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
-                    num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight: 
-            
-            init.GMMInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
-                                                num_gpus, hidden_size, activation, master, num_cpus),
-        
-        'random': lambda epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
-                    num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight: 
-            
-            init.RandomInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
-                                                num_gpus, hidden_size, activation, master, num_cpus),
-        
-        'supervised': lambda epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
-                    num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight: 
-            
-            init.SupervisedInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, init_path, name, n_components, data, q_nrm, device, 
-                                                num_gpus, hidden_size, activation, master, num_cpus, y, supervised_loss_weight),
-    }
+            init.RandomInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, n_components, data, device, 
+                                                num_gpus, hidden_size, activation, master, num_cpus, has_missing),
+        }
 
     @classmethod
     def get_switchers(cls) -> dict[str, object]:

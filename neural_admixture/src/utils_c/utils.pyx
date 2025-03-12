@@ -15,39 +15,25 @@ cdef inline double _computeH(const double* p, const double* q, const size_t K) n
     return h
 
 # Expand data from 2-bit to 8-bit genotype matrix
-cpdef void expandGeno(const unsigned char[:,::1] B, unsigned char[:,::1] G, double[::1] q_nrm) noexcept nogil:
+cpdef void expandGeno(const unsigned char[:,::1] B, unsigned char[:,::1] G) noexcept nogil:
     cdef:
         size_t M = G.shape[0]
         size_t N = G.shape[1]
         size_t N_b = B.shape[1]
         size_t i, j, b, x, bit
-        double* Q_cnt
         unsigned char[4] recode = [2, 9, 1, 0]
         unsigned char mask = 3
         unsigned char byte
-        omp.omp_lock_t mutex
-    omp.omp_init_lock(&mutex)
     with nogil, parallel():
-        Q_cnt = <double*>calloc(N, sizeof(double))
         for j in prange(M):
             i = 0
             for b in range(N_b):
                 byte = B[j,b]
                 for bit in range(4):
                     G[j,i] = recode[(byte >> 2*bit) & mask]
-                    if G[j,i] != 9:
-                        Q_cnt[i] += 1.0
                     i = i + 1
                     if i == N:
                         break
-        
-        # omp critical
-        omp.omp_set_lock(&mutex)
-        for x in range(N):
-            q_nrm[x] += Q_cnt[x]
-        omp.omp_unset_lock(&mutex)
-        free(Q_cnt)
-    omp.omp_destroy_lock(&mutex)
 
 cpdef void estimateMean(const unsigned char[:,::1] G, float[::1] mean) noexcept nogil:
     cdef:

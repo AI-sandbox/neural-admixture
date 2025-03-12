@@ -5,7 +5,6 @@ import time
 import torch
 from scipy import sparse
 
-from pathlib import Path
 from typing import Tuple
 
 from .neural_admixture import NeuralAdmixture
@@ -73,9 +72,9 @@ class RandomInitialization(object):
     Class to initialize a neural admixture model using Gaussian Mixture Models (GMM).
     """
     @classmethod
-    def get_decoder_init(cls, epochs: int, batch_size: int, learning_rate: float, K: int, seed: int, init_path: Path, 
-                        name: str, n_components: int, data: np.ndarray, q_nrm, device: torch.device, num_gpus: int, hidden_size: int, 
-                        activation: torch.nn.Module, master: bool, num_cpus: int) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+    def get_decoder_init(cls, epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
+                        n_components: int, data: np.ndarray, device: torch.device, num_gpus: int, hidden_size: int, 
+                        activation: torch.nn.Module, master: bool, num_cpus: int, has_missing: bool) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Initializes P and Q matrices and trains a neural admixture model using GMM.
 
@@ -102,24 +101,22 @@ class RandomInitialization(object):
             log.info("    Running Random initialization...")
 
         M, N = data.shape
-        
-        # TO DO : missing data imputation
-        f = np.zeros(M, dtype=np.float32)
-        utils.estimateMean(data, f)
-        
         device_tensors = determine_device_for_tensors((N, M), K, device)
-
-        X_subspace = sparse_random_projection(data, 8, device_tensors, master)
+        if has_missing:
+            f = np.zeros(M, dtype=np.float32)
+            utils.estimateMean(data, f)
+            f = torch.as_tensor(f.T, dtype=torch.float32, device=device_tensors)
+        else:
+            f = None
+        
+        X_subspace = sparse_random_projection(data, n_components, device_tensors, master)
         indices = np.random.choice(N, K, replace=False)
         P_init = torch.as_tensor(data[:, indices], dtype=torch.float32, device=device).contiguous() / 2
         data = torch.as_tensor(data.T, dtype=torch.uint8, device=device_tensors)
-
-        log.info(data.max())
-        log.info(data.min())
         
         model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device_tensors, master, num_cpus)
         
-        P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_subspace.shape[1], K, activation, X_subspace)
+        P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_subspace.shape[1], K, activation, X_subspace, f)
         
         data = np.ascontiguousarray(data.T.cpu(), dtype=np.uint8)
         P = np.ascontiguousarray(P,  dtype=np.float64)
