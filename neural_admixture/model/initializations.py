@@ -148,7 +148,7 @@ def sparse_random_projection(data, dim, device, master):
         projection_matrix = np.random.randn(M, dim) / np.sqrt(M)
         X_subspace = np.zeros((N, dim), dtype=np.float32)
         for i in range(N):  
-            X_subspace[i, :] = data[:, i].astype(np.float32) @ projection_matrix  
+            X_subspace[i, :] = data[:, i].astype(np.float32)/2 @ projection_matrix  
     
     else:  # Large matrix → sparse projection
         if master:
