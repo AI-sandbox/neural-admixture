@@ -26,9 +26,9 @@ def parse_train_args(argv: List[str]):
                                            description='Rapid population clustering with autoencoders - training mode',
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
     
-    parser.add_argument('--epochs', required=False, type=int, default=450, help='Maximum number of epochs.')
+    parser.add_argument('--epochs', required=False, type=int, default=25, help='Maximum number of epochs.')
     parser.add_argument('--batch_size', required=False, default=800, type=int, help='Batch size.')
-    parser.add_argument('--learning_rate', required=False, default=4e-3, type=float, help='Learning rate.')
+    parser.add_argument('--learning_rate', required=False, default=25e-4, type=float, help='Learning rate.')
 
     parser.add_argument('--initialization', required=False, type=str, default = 'random',
                         choices=['random'], help='P initialization.')
@@ -113,11 +113,11 @@ def train(initialization: str, device: torch.device, k: int, seed: int, n_compon
     """
     switchers = Switchers.get_switchers()
     activation = switchers['activations'][activation_str](0)
-    P, Q, model = switchers['initializations'][initialization](
+    P, Q = switchers['initializations'][initialization](
         epochs, batch_size, learning_rate, k, seed, n_components, data, device, 
         num_gpus, hidden_size, activation, master, num_cpus, has_missing)
     
-    return P, Q, model
+    return P, Q
 
 def write_outputs(Q: np.ndarray, run_name: str, K: int, out_path: str, P: np.ndarray=None) -> None:
     """

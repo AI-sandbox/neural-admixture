@@ -27,14 +27,10 @@ def fit_model(args: argparse.Namespace, trX: da.core.Array, device: torch.device
     utils.set_seed(seed)
     
     K = int(args.k)
-    P, Q, model = utils.train(initialization, device, K, seed, n_components, epochs, batch_size, learning_rate, trX, num_gpus, 
+    P, Q = utils.train(initialization, device, K, seed, n_components, epochs, batch_size, learning_rate, trX, num_gpus, 
                             activation_str, hidden_size, master, num_cpus, has_missing)
     if master:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
-        save_path = f'{save_dir}/{name}.pt'
-        state_dict = {key: value for key, value in model.state_dict().items() if key != 'P'}
-        torch.save(state_dict, save_path)
-        model.save_config(name, save_dir)
         utils.write_outputs(Q, name, K, save_dir, P)
 
     return

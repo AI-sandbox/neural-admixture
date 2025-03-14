@@ -29,25 +29,25 @@ def adamStep(G, P0, Q0, Q_tmp, P1, Q1, Q_bat, s,
     
     t[0] = t_val
 
-def optimize_parameters(G, P, Q, seed, iterations=1000, batches=32, check=5, tole=1e-3):
+def optimize_parameters(G, P, Q, seed, iterations=1000, batches=32, check=2, tole=1e-3):
     M = G.shape[0]
     s = np.arange(M, dtype=np.uint32)
     batch_M = math.ceil(M / batches)
     rng = np.random.default_rng(seed)
     
     #ADAM variables (first and second moments for P and Q)
-    m_P = np.zeros_like(P)
-    v_P = np.zeros_like(P)
-    m_Q = np.zeros_like(Q)
-    v_Q = np.zeros_like(Q)
+    m_P = np.zeros_like(P, dtype=np.float32)
+    v_P = np.zeros_like(P, dtype=np.float32)
+    m_Q = np.zeros_like(Q, dtype=np.float32)
+    v_Q = np.zeros_like(Q, dtype=np.float32)
     t = [0]
     
     # Temporal variables
-    P1 = np.zeros_like(P)
-    Q1 = np.zeros_like(Q)
-    Q_tmp = np.zeros_like(Q)
-    q_bat = np.zeros(G.shape[1])
-    
+    P1 = np.zeros_like(P, dtype=np.float32)
+    Q1 = np.zeros_like(Q, dtype=np.float32)
+    Q_tmp = np.zeros_like(Q, dtype=np.float32)
+    q_bat = np.zeros(G.shape[1], dtype=np.float32)
+        
     # Variables for best parameters:
     P_old, Q_old = P.copy(), Q.copy()
     L_old, L_pre = float('-inf'), float('-inf')
@@ -62,7 +62,7 @@ def optimize_parameters(G, P, Q, seed, iterations=1000, batches=32, check=5, tol
                 m_P, v_P, m_Q, v_Q, t,
                 alpha=0.0025, beta1=0.80, beta2=0.88, epsilon=1e-8)
         
-        L_cur = utils.loglike(G, P, Q)
+        L_cur = utils.loglike(G, P.astype(np.float64), Q.astype(np.float64))
         if L_cur > L_old:
             P_old[:], Q_old[:], L_old = P.copy(), Q.copy(), L_cur
         

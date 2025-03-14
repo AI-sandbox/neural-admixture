@@ -1,17 +1,16 @@
 import logging
 import numpy as np
 import sys
-import time
-import torch
-from scipy import sparse
 
+import torch
+from sklearn.mixture import GaussianMixture as GaussianMixture
 from typing import Tuple
 
-from .neural_admixture import NeuralAdmixture
-
-from .em_quasi import optimize_parameters
-
+from .em_adam import optimize_parameters
+from ..src.ipca_gpu import GPUIncrementalPCA
 from ..src.utils_c import utils
+
+torch.serialization.add_safe_globals([GPUIncrementalPCA])
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
@@ -66,7 +65,6 @@ def determine_device_for_tensors(data_shape: tuple, K: int, device: torch.device
         
     return device_tensors
 
-
 class RandomInitialization(object):
     """
     Class to initialize a neural admixture model using Gaussian Mixture Models (GMM).
@@ -102,6 +100,9 @@ class RandomInitialization(object):
 
         M, N = data.shape
         device_tensors = determine_device_for_tensors((N, M), K, device)
+        
+        # MISSING VALUES:
+        log.info("    Calculating mean SNPs for imputation...")
         if has_missing:
             f = np.zeros(M, dtype=np.float32)
             utils.estimateMean(data, f)
@@ -109,63 +110,36 @@ class RandomInitialization(object):
         else:
             f = None
         
-        X_subspace = sparse_random_projection(data, n_components, device_tensors, master)
-        indices = np.random.choice(N, K, replace=False)
-        P_init = torch.as_tensor(data[:, indices], dtype=torch.float32, device=device).contiguous() / 2
-        data = torch.as_tensor(data.T, dtype=torch.uint8, device=device_tensors)
+        # PCA:
+        log.info("    Running PCA in a subset of data...")
+        max_samples = min(5096, data.shape[1])
+        if data.shape[1] > max_samples:
+            indices = np.random.choice(data.shape[1], max_samples, replace=False)
+            selected_data = data[:, indices].T/2
+        else:
+            selected_data = data.T/2
+        pca_obj = GPUIncrementalPCA(n_components=int(n_components), batch_size=batch_size, device=device)
+        pca_obj.fit(selected_data)
         
-        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device_tensors, master, num_cpus)
+        X_pca = torch.zeros((N, n_components), dtype=torch.float32)
+        for i in range(0, N, 1024):
+            end_idx = min(i + 1024, N)
+            batch = data[:, i:end_idx].T.astype(np.float32)/2
+            X_pca[i:end_idx] = pca_obj.transform(batch).cpu()
         
-        P, Q, raw_model = model.launch_training(P_init, data, hidden_size, X_subspace.shape[1], K, activation, X_subspace, f)
+        # GMM:
+        log.info("    Running Gaussian Mixture in PCA subspace...")
+        gmm = GaussianMixture(n_components=K, n_init=3, init_params='k-means++', tol=1e-4, covariance_type='full')        
+        gmm.fit(X_pca.numpy())
         
-        data = np.ascontiguousarray(data.T.cpu(), dtype=np.uint8)
-        P = np.ascontiguousarray(P,  dtype=np.float64)
-        Q = np.ascontiguousarray(Q,  dtype=np.float64)
+        # ADAM EM:
+        log.info("    Adam expectation maximization running...")
+        log.info("")
+        data = np.ascontiguousarray(data, dtype=np.uint8)
+        P = np.ascontiguousarray(pca_obj.inverse_transform(gmm.means_).cpu().numpy().T, dtype=np.float32)
+        Q = np.random.random(size=(N, K)).clip(min=1e-5, max=1.0-(1e-5)).astype(np.float32)
+        Q /= np.sum(Q, axis=1, keepdims=True)
         
         optimize_parameters(data, P, Q, seed)
         
-        return P, Q, raw_model
-
-def sparse_random_projection(data, dim, device, master):
-    """
-    Implements an efficient random projection for matrices, using:
-    - Dense projection for small/medium matrices
-    - Sparse projection for large matrices
-
-    Parameters:
-    - data: NumPy matrix of shape (M, N) [SNPs x samples]
-    - dim: dimension of the projected subspace
-    - device: torch device ('cuda' or 'cpu')
-
-    Returns:
-    - X_subspace_tensor: torch tensor with projected data
-    """
-    M, N = data.shape
-    
-    if M <= 100000 or N <= 50000:  # Small or medium matrix → dense projection
-        if master:
-            log.info("    Projection on a dense matrix...")
-        projection_matrix = np.random.randn(M, dim) / np.sqrt(M)
-        X_subspace = np.zeros((N, dim), dtype=np.float32)
-        for i in range(N):  
-            X_subspace[i, :] = data[:, i].astype(np.float32)/2 @ projection_matrix  
-    
-    else:  # Large matrix → sparse projection
-        if master:
-            log.info("    Projection on a sparse matrix...")
-        density = min(3.0 / np.sqrt(M), 1.0)
-        s = 1.0 / np.sqrt(density)
-        projection_matrix = sparse.random(M, dim, density=density, 
-                                          data_rvs=lambda n: np.random.choice([-s, s], size=n),
-                                          format='csr')
-        batch_size = min(10000, N)  # Adjust based on available memory
-        X_subspace = np.zeros((N, dim), dtype=np.float32)
-        for i in range(0, N, batch_size):
-            end_idx = min(i + batch_size, N)
-            batch = data[:, i:end_idx].T.astype(np.float32)
-            X_subspace[i:end_idx] = batch @ projection_matrix
-    
-    # Convert to PyTorch tensor
-    X_subspace_tensor = torch.tensor(X_subspace, dtype=torch.float32, device=device)
-    
-    return X_subspace_tensor
+        return P, Q
