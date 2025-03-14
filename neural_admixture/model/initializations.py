@@ -137,8 +137,7 @@ class RandomInitialization(object):
         log.info("")
         data = np.ascontiguousarray(data, dtype=np.uint8)
         P = np.ascontiguousarray(pca_obj.inverse_transform(gmm.means_).cpu().numpy().T, dtype=np.float32)
-        Q = np.random.random(size=(N, K)).clip(min=1e-5, max=1.0-(1e-5)).astype(np.float32)
-        Q /= np.sum(Q, axis=1, keepdims=True)
+        Q = gmm.predict_proba(X_pca.numpy()).astype(np.float32)
         
         optimize_parameters(data, P, Q, seed)
         
