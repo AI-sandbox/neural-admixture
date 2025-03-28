@@ -29,7 +29,7 @@ def adamStep(G, P0, Q0, Q_tmp, P1, Q1, Q_bat, s,
     
     t[0] = t_val
 
-def optimize_parameters(G, P, Q, seed, iterations=1000, batches=32, check=2, tole=1e-3):
+def optimize_parameters(G, P, Q, seed, iterations=1000, batches=32, check=4, tole=1e-3):
     M = G.shape[0]
     s = np.arange(M, dtype=np.uint32)
     batch_M = math.ceil(M / batches)

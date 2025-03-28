@@ -51,16 +51,18 @@ def main():
             num_cpus = int(arg_list[num_cpus_index])
             num_threads = num_cpus//2
     else:
+        num_cpus = 1
         num_threads = 1
     
-    os.environ["MKL_NUM_THREADS"] = str(num_threads)
-    os.environ["MKL_MAX_THREADS"] = str(num_threads)
-    os.environ["OMP_NUM_THREADS"] = str(num_threads)
-    os.environ["OMP_MAX_THREADS"] = str(num_threads)
-    os.environ["NUMEXPR_NUM_THREADS"] = str(num_threads)
-    os.environ["NUMEXPR_MAX_THREADS"] = str(num_threads)
-    os.environ["OPENBLAS_NUM_THREADS"] = str(num_threads)
-    os.environ["OPENBLAS_MAX_THREADS"] = str(num_threads)
+    #str(num_threads)
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["MKL_MAX_THREADS"] = "1"
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["OMP_MAX_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+    os.environ["NUMEXPR_MAX_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_MAX_THREADS"] = "1"
     
     log.info(f"    There are {num_cpus} CPU's available for this execution. Hence, using {num_threads} threads.")
 

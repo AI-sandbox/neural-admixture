@@ -50,7 +50,7 @@ cpdef void estimateMean(const unsigned char[:,::1] G, float[::1] mean) noexcept 
                 c = c + <float>G[j, i]
                 n = n + 1.0
         if n > 0:
-            mean[j] = c / n
+            mean[j] = c/(2.0*n)
         else:
             mean[j] = 0.0
 

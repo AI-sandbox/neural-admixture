@@ -99,46 +99,42 @@ class RandomInitialization(object):
             log.info("    Running Random initialization...")
 
         M, N = data.shape
-        device_tensors = determine_device_for_tensors((N, M), K, device)
         
-        # MISSING VALUES:
-        log.info("    Calculating mean SNPs for imputation...")
-        if has_missing:
-            f = np.zeros(M, dtype=np.float32)
-            utils.estimateMean(data, f)
-            f = torch.as_tensor(f.T, dtype=torch.float32, device=device_tensors)
-        else:
-            f = None
+        import time
+        import dask.array as da
+        import dask
+        t0 = time.time()
+        
+        dask.config.set({"random.seed": seed})
+        data_dask = da.from_array(data.T, chunks=(512, 512))
+        if np.any(data == 9):
+            data_dask = da.where(data_dask == 9, 0, data_dask)
+        log.info("data dask matrix created")
+        _, _, V = da.linalg.svd_compressed(data_dask, k=K, compute=True, n_power_iter=0)
+        log.info("U, V matrix created")
+        V=V.compute().astype(np.float32)
+        t1 = time.time()
+        
+        log.info(f"    Time spent in svd: {t1-t0:.2f}s")
         
         # PCA:
-        log.info("    Running PCA in a subset of data...")
-        max_samples = min(5096, data.shape[1])
-        if data.shape[1] > max_samples:
-            indices = np.random.choice(data.shape[1], max_samples, replace=False)
-            selected_data = data[:, indices].T/2
-        else:
-            selected_data = data.T/2
-        pca_obj = GPUIncrementalPCA(n_components=int(n_components), batch_size=batch_size, device=device)
-        pca_obj.fit(selected_data)
-        
-        X_pca = torch.zeros((N, n_components), dtype=torch.float32)
+        X_pca = np.zeros((N, K), dtype=np.float32)
         for i in range(0, N, 1024):
             end_idx = min(i + 1024, N)
             batch = data[:, i:end_idx].T.astype(np.float32)/2
-            X_pca[i:end_idx] = pca_obj.transform(batch).cpu()
+            X_pca[i:end_idx] = batch@V.T
         
         # GMM:
         log.info("    Running Gaussian Mixture in PCA subspace...")
-        gmm = GaussianMixture(n_components=K, n_init=3, init_params='k-means++', tol=1e-4, covariance_type='full')        
-        gmm.fit(X_pca.numpy())
+        gmm = GaussianMixture(n_components=K, n_init=5, init_params='k-means++', tol=1e-4, covariance_type='full', verbose=True, max_iter=100, random_state=seed)        
+        gmm.fit(X_pca)
         
         # ADAM EM:
+        P = np.ascontiguousarray((gmm.means_@V).T, dtype=np.float32)
+        Q = gmm.predict_proba(X_pca).astype(np.float32)
+
         log.info("    Adam expectation maximization running...")
         log.info("")
-        data = np.ascontiguousarray(data, dtype=np.uint8)
-        P = np.ascontiguousarray(pca_obj.inverse_transform(gmm.means_).cpu().numpy().T, dtype=np.float32)
-        Q = gmm.predict_proba(X_pca.numpy()).astype(np.float32)
-        
         optimize_parameters(data, P, Q, seed)
         
         return P, Q
