@@ -7,10 +7,7 @@ from sklearn.mixture import GaussianMixture as GaussianMixture
 from typing import Tuple
 
 from .em_adam import optimize_parameters
-from ..src.ipca_gpu import GPUIncrementalPCA
 from ..src.utils_c import utils
-
-torch.serialization.add_safe_globals([GPUIncrementalPCA])
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
@@ -105,12 +102,12 @@ class RandomInitialization(object):
         import dask
         t0 = time.time()
         
-        dask.config.set({"random.seed": seed})
-        data_dask = da.from_array(data.T, chunks=(512, 512))
-        if np.any(data == 9):
-            data_dask = da.where(data_dask == 9, 0, data_dask)
-        log.info("data dask matrix created")
-        _, _, V = da.linalg.svd_compressed(data_dask, k=K, compute=True, n_power_iter=0)
+        with dask.config.set({"random.seed": seed}):
+            data_dask = da.from_array(data.T, chunks=(768, 768))
+            if np.any(data == 9):
+                data_dask = da.where(data_dask == 9, 0, data_dask)
+            log.info("data dask matrix created")
+            _, _, V = da.linalg.svd_compressed(data_dask, k=K, compute=True, n_power_iter=0, iterator='power', n_oversamples=10)
         log.info("U, V matrix created")
         V=V.compute().astype(np.float32)
         t1 = time.time()
@@ -130,7 +127,7 @@ class RandomInitialization(object):
         gmm.fit(X_pca)
         
         # ADAM EM:
-        P = np.ascontiguousarray((gmm.means_@V).T, dtype=np.float32)
+        P = np.ascontiguousarray(np.clip((gmm.means_@V).T, 0, 1), dtype=np.float32)
         Q = gmm.predict_proba(X_pca).astype(np.float32)
 
         log.info("    Adam expectation maximization running...")
