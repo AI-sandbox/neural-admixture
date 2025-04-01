@@ -106,9 +106,9 @@ class RandomInitialization(object):
             data_dask = da.from_array(data.T, chunks=(768, 768))
             if np.any(data == 9):
                 data_dask = da.where(data_dask == 9, 0, data_dask)
-            log.info("data dask matrix created")
+            log.info("    Data dask matrix created")
             _, _, V = da.linalg.svd_compressed(data_dask, k=K, compute=True, n_power_iter=0, iterator='power', n_oversamples=10)
-        log.info("U, V matrix created")
+        log.info("    V matrix created")
         V=V.compute().astype(np.float32)
         t1 = time.time()
         
@@ -123,12 +123,12 @@ class RandomInitialization(object):
         
         # GMM:
         log.info("    Running Gaussian Mixture in PCA subspace...")
-        gmm = GaussianMixture(n_components=K, n_init=5, init_params='k-means++', tol=1e-4, covariance_type='full', verbose=True, max_iter=100, random_state=seed)        
+        gmm = GaussianMixture(n_components=K, n_init=5, init_params='k-means++', tol=1e-4, covariance_type='full', max_iter=100, random_state=seed)        
         gmm.fit(X_pca)
         
         # ADAM EM:
-        P = np.ascontiguousarray(np.clip((gmm.means_@V).T, 0, 1), dtype=np.float32)
-        Q = gmm.predict_proba(X_pca).astype(np.float32)
+        P = np.ascontiguousarray(np.clip((gmm.means_@V).T, 1e-5, 1 - 1e-5), dtype=np.float32)
+        Q = np.clip(gmm.predict_proba(X_pca).astype(np.float32), 1e-5, 1 - 1e-5)
 
         log.info("    Adam expectation maximization running...")
         log.info("")
