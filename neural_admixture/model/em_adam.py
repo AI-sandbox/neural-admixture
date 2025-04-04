@@ -29,7 +29,7 @@ def adamStep(G, P0, Q0, Q_tmp, P1, Q1, Q_bat, s,
     
     t[0] = t_val
 
-def optimize_parameters(G, P, Q, seed, iterations=1000, batches=1, check=32, tole=1e-3):
+def optimize_parameters(G, P, Q, seed, iterations=1000, batches=32, check=4, tole=1e-3):
     M = G.shape[0]
     s = np.arange(M, dtype=np.uint32)
     batch_M = math.ceil(M / batches)
@@ -142,11 +142,14 @@ def optimize_parameters(G, P, Q, seed, iterations=1000, batches=1, check=32, tol
                 if L_cur < L_best_check:
                     worsen_count += 1
                     if worsen_count >= 2:
+                        log.info("")
                         log.info("    Stopping early: Log-likelihood worsened twice consecutively.")
+                        log.info("")
                         # Use best parameters
                         P[:], Q[:] = P_old.copy(), Q_old.copy()
                         L_cur = L_old
                         log.info(f"    Final log-likelihood: {L_old:.1f}")
+                        log.info("")
                         break
                 else:
                     worsen_count = 0

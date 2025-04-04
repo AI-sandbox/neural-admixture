@@ -3,11 +3,16 @@ import numpy as np
 import sys
 
 import torch
+import torch.nn as nn
+import torch.optim as optim
+
 from sklearn.mixture import GaussianMixture as GaussianMixture
 from typing import Tuple
+from tqdm.auto import tqdm
+from torch.utils.data import Dataset, DataLoader
+from collections import deque
 
 from .em_adam import optimize_parameters
-from ..src.utils_c import utils
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
@@ -122,7 +127,9 @@ class RandomInitialization(object):
             X_pca[i:end_idx] = batch@V.T
         
         # GMM:
+        log.info("")
         log.info("    Running Gaussian Mixture in PCA subspace...")
+        log.info("")
         gmm = GaussianMixture(n_components=K, n_init=5, init_params='k-means++', tol=1e-4, covariance_type='full', max_iter=100, random_state=seed)        
         gmm.fit(X_pca)
         
@@ -132,6 +139,126 @@ class RandomInitialization(object):
 
         log.info("    Adam expectation maximization running...")
         log.info("")
-        optimize_parameters(data, P, Q, seed)
+        P, Q = optimize_parameters(data, P, Q, seed)
         
+        # REFINEMENT:
+        log.info("    Refinement algorithm running...")
+        log.info("")
+        P = torch.as_tensor(P.T, dtype=torch.float32, device=device)
+        Q = torch.as_tensor(Q, dtype=torch.float32, device=device)
+        data = torch.as_tensor(data.T, dtype=torch.uint8)
+        
+        P, Q = train_model(P, Q, data, device, num_epochs=100, patience=5)
+        
+        logl = loglikelihood(Q, P, data)
+        log.info(f"    Final log-likelihood: {logl:.1f}")  
+
         return P, Q
+
+class AdmixtureDataset(Dataset):
+    def __init__(self, data):
+        self.data = data
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        return idx, self.data[idx].float() / 2
+
+class AdmixtureOptimizer(nn.Module):
+    def __init__(self, init_P, init_Q):
+        super().__init__()
+        self.P = nn.Parameter(init_P)
+        self.Q = nn.Parameter(init_Q)
+    
+    def forward(self, indices):
+        Q_batch = self.Q[indices]
+        R = torch.mm(Q_batch, self.P)
+        return torch.clamp(R, 0.0, 1.0)
+
+def train_model(P, Q, data, device, num_epochs=100, patience=5):
+    dataset = AdmixtureDataset(data)
+    batch_size = 512
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    
+    model = AdmixtureOptimizer(P, Q).to(device)
+    criterion = nn.BCELoss()
+    
+    best_loss = float('inf')
+    best_P = model.P.clone().detach()
+    best_Q = model.Q.clone().detach()
+    recent_losses = deque(maxlen=patience)
+    
+    for epoch in tqdm(range(num_epochs), desc="Epochs", file=sys.stderr):
+        loss_acc = 0.0
+        
+        if epoch % 2 == 0:
+            model.Q.requires_grad_(False)
+            model.P.requires_grad_(True)
+            optimizer = optim.Adam([model.P], lr=5e-6, fused=True)
+        else:
+            model.Q.requires_grad_(True)
+            model.P.requires_grad_(False)
+            optimizer = optim.Adam([model.Q], lr=5e-6, fused=True)
+        
+        for indices, X_batch in dataloader:
+            indices = indices.to(device)
+            X_batch = X_batch.to(device)
+            
+            optimizer.zero_grad(set_to_none=True)
+            R = model(indices)
+            loss = criterion(R, X_batch)
+            loss.backward()
+            optimizer.step()
+            with torch.no_grad():
+                model.P.clamp_(0.0, 1.0)
+                model.Q.clamp_(0.0, 1.0)
+            
+            loss_acc += loss.item()
+        
+        log.info(f"    Epoch {epoch+1}, Loss: {loss_acc}")
+        
+        if loss_acc < best_loss:
+            best_loss = loss_acc
+            best_P = model.P.clone().detach()
+            best_Q = model.Q.clone().detach()
+        
+        recent_losses.append(loss_acc)
+        
+        if len(recent_losses) == patience and not any(loss < recent_losses[0] for loss in list(recent_losses)[1:]):
+            log.info("")
+            log.info("    Early stopping triggered")
+            log.info("")
+            break
+
+    return best_P.cpu(), best_Q.cpu()
+
+def loglikelihood(Q: torch.Tensor, P: torch.Tensor, data: torch.Tensor, batch_size: int = 512, eps: float = 1e-7) -> float:
+    """Compute deviance for a single K using PyTorch tensors
+
+    Args:
+        Q (torch.Tensor): Matrix Q of shape (N, D).
+        P (torch.Tensor): Matrix P of shape (D, M).
+        data (torch.Tensor): Original data of shape (N, M).
+        batch_size (int, optional): Size of each batch. Defaults to 64.
+        eps (float, optional): Epsilon term to avoid numerical errors. Defaults to 1e-7.
+
+    Returns:
+        float: Computed log-likelihood value.
+    """
+    result = 0.0
+    N = Q.shape[0]
+    
+    for init in range(0, N, batch_size):
+        end = min(init + batch_size, N)
+        Q_batch = Q[init:end]
+        data_batch = data[init:end]
+        
+        rec_batch = torch.clamp(torch.matmul(Q_batch, P), eps, 1 - eps)
+        data_batch = torch.clamp(data_batch, eps, 2 - eps)
+
+        loglikelihood_batch = data_batch * torch.log(rec_batch) + (2 - data_batch) * torch.log1p(-rec_batch)
+        
+        result += torch.sum(loglikelihood_batch).item()
+        
+    return result
