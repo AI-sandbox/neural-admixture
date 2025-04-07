@@ -29,7 +29,7 @@ def adamStep(G, P0, Q0, Q_tmp, P1, Q1, Q_bat, s,
     
     t[0] = t_val
 
-def optimize_parameters(G, P, Q, seed, iterations=1000, batches=32, check=4, tole=1e-3):
+def optimize_parameters(G, P, Q, seed, iterations=1500, batches=32, check=4, tole=1e-2):
     M = G.shape[0]
     s = np.arange(M, dtype=np.uint32)
     batch_M = math.ceil(M / batches)
@@ -81,7 +81,7 @@ def optimize_parameters(G, P, Q, seed, iterations=1000, batches=32, check=4, tol
         if (it + 1) % check == 0:
             if batches > 1:
                 L_cur = utils.loglike(G, P.astype(np.float64), Q.astype(np.float64))
-                log.info(f"    Iteration {it+1}: \tLog-like: {L_cur:.1f}\t({time.time()-ts:.3f}s)")
+                log.info(f"    Iteration {it+1}: \tLog-likelihood: {L_cur:.1f}\t({time.time()-ts:.3f}s)")
                 
                 # Primera iteración: inicializar valores de referencia
                 if L_pre == float('-inf'):
@@ -98,11 +98,13 @@ def optimize_parameters(G, P, Q, seed, iterations=1000, batches=32, check=4, tol
                 if L_cur < L_best_check:
                     worsen_count += 1
                     if worsen_count >= 2:
+                        log.info("")
                         log.info("    Stopping early: Log-likelihood worsened twice consecutively.")
+                        log.info("")
                         # Use best parameters
                         P[:], Q[:] = P_old.copy(), Q_old.copy()
                         L_cur = L_old
-                        log.info(f"    Final log-likelihood: {L_old:.1f}")
+                        log.info(f"    Log-likelihood: {L_old:.1f}")
                         break
                 else:
                     worsen_count = 0
@@ -126,7 +128,7 @@ def optimize_parameters(G, P, Q, seed, iterations=1000, batches=32, check=4, tol
                         L_old = L_cur
             else:
                 L_cur = utils.loglike(G, P.astype(np.float64), Q.astype(np.float64))
-                log.info(f"    Iteration {it+1}: \tLog-like: {L_cur:.1f}\t({time.time()-ts:.3f}s)")
+                log.info(f"    Iteration {it+1}: \tLog-likelihood: {L_cur:.1f}\t({time.time()-ts:.3f}s)")
                 
                 # Primera iteración: inicializar valores de referencia
                 if L_pre == float('-inf'):
@@ -148,7 +150,7 @@ def optimize_parameters(G, P, Q, seed, iterations=1000, batches=32, check=4, tol
                         # Use best parameters
                         P[:], Q[:] = P_old.copy(), Q_old.copy()
                         L_cur = L_old
-                        log.info(f"    Final log-likelihood: {L_old:.1f}")
+                        log.info(f"    Log-likelihood: {L_old:.1f}")
                         log.info("")
                         break
                 else:
@@ -160,8 +162,7 @@ def optimize_parameters(G, P, Q, seed, iterations=1000, batches=32, check=4, tol
                     if L_cur < L_old:  # Use best estimates
                         P[:], Q[:] = P_old.copy(), Q_old.copy()
                         L_cur = L_old
-                    log.info("    Converged!")
-                    log.info(f"    Final log-likelihood: {L_cur:.1f}")
+                    log.info(f"    Log-likelihood: {L_cur:.1f}")
                     break
                 else:
                     L_pre = L_cur
