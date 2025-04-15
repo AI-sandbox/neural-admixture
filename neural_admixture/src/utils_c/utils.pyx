@@ -5,14 +5,14 @@ from cython.parallel import parallel, prange
 from libc.math cimport fmax, fmin, log, log1p, sqrt, fmaxf, fminf, sqrtf
 from libc.stdlib cimport calloc, free
 
-# Estimate individual allele frequencies
-cdef inline double _computeH(const double* p, const double* q, const size_t K) noexcept nogil:
+# Compute reconstruction matrix
+cdef inline double _reconstruct(const double* p, const double* q, const size_t K) noexcept nogil:
     cdef:
         size_t k
-        double h = 0.0
+        double rec = 0.0
     for k in range(K):
-        h += p[k]*q[k]
-    return h
+        rec += p[k]*q[k]
+    return rec
 
 # Expand data from 2-bit to 8-bit genotype matrix
 cpdef void expandGeno(const unsigned char[:,::1] B, unsigned char[:,::1] G) noexcept nogil:
@@ -35,40 +35,21 @@ cpdef void expandGeno(const unsigned char[:,::1] B, unsigned char[:,::1] G) noex
                     if i == N:
                         break
 
-cpdef void estimateMean(const unsigned char[:,::1] G, float[::1] mean) noexcept nogil:
-    cdef:
-        size_t M = G.shape[0]
-        size_t N = G.shape[1]
-        size_t i, j
-        float c, n
-
-    for j in prange(M):  # Iterate through each SNP (row)
-        c = 0.0
-        n = 0.0
-        for i in range(N):  # Iterate through each individual (column)
-            if G[j, i] != 9:
-                c = c + <float>G[j, i]
-                n = n + 1.0
-        if n > 0:
-            mean[j] = c/(2.0*n)
-        else:
-            mean[j] = 0.0
-
-# Log-likelihood
+# Log-likelihood calculation
 cpdef double loglike(const unsigned char[:,::1] G, double[:,::1] P, const double[:,::1] Q) noexcept nogil:
     cdef:
         size_t M = G.shape[0]
         size_t N = G.shape[1]
         size_t K = Q.shape[1]
         size_t i, j
-        double res = 0.0
-        double d, h
+        double logl = 0.0
+        double g_d, rec
         double* p
     for j in prange(M):
         p = &P[j,0]
         for i in range(N):
             if G[j,i] != 9:
-                h = _computeH(p, &Q[i,0], K)
-                d = <double>G[j,i]
-                res += d*log(h) + (2.0-d)*log1p(-h)
-    return res
+                rec = _reconstruct(p, &Q[i,0], K)
+                g_d = <double>G[j,i]
+                logl += g_d*log(rec) + (2.0-g_d)*log1p(-rec)
+    return logl

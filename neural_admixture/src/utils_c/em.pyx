@@ -5,58 +5,45 @@ from cython.parallel import parallel, prange
 from libc.math cimport fmax, fmin, sqrt, pow
 from libc.stdlib cimport calloc, free
 
-# Truncate parameters to domain
-cdef inline float _project(const float s) noexcept nogil:
-    return fmin(fmax(s, 1e-5), 1.0 - 1e-5)
-
-# Estimate individual allele frequencies
-cdef inline float _computeH(const float* p, const float* q, const size_t K) noexcept nogil:
+# Update temporary accumulators for P and Q
+cdef inline void _update_temp_factors(float* A, float* B, float* t, const float* p, const float* q, const unsigned char g, const float rec, const size_t K) noexcept nogil:
     cdef:
         size_t k
-        float h = 0.0
+        float g_f = <float>g
+        float a = g_f/rec
+        float b = (2.0-g_f)/(1.0-rec)
     for k in range(K):
-        h += p[k]*q[k]
-    return h
+        A[k] += q[k]*a
+        B[k] += q[k]*b
+        t[k] += p[k]*(a - b) + b
 
-# Inner loop updates for temp P and Q
-cdef inline void _inner(const float* p, const float* q, float* p_a, float* p_b, float* q_thr, const unsigned char g, const float h, const size_t K) noexcept nogil:
-    cdef:
-        size_t k
-        float d = <float>g
-        float a = d/h
-        float b = (2.0-d)/(1.0-h)
-    for k in range(K):
-        p_a[k] += q[k]*a
-        p_b[k] += q[k]*b
-        q_thr[k] += p[k]*(a - b) + b
-
-# Outer loop accelerated update for P
-cdef inline void _outerAccelP(const float* p, float* p_n, float* p_a, float* p_b, const size_t K) noexcept nogil:
+# EM : Update P
+cdef inline void _updateEM_P(float* A, float* B, const float* p, float* P_EM, const size_t K) noexcept nogil:
     cdef:
         size_t k
     for k in range(K):
-        p_n[k] = _project((p_a[k]*p[k])/(p[k]*(p_a[k] - p_b[k]) + p_b[k]))
-        p_a[k] = 0.0
-        p_b[k] = 0.0
+        P_EM[k] = _clip_to_domain((A[k]*p[k])/(p[k]*(A[k] - B[k]) + B[k]))
+        A[k] = 0.0
+        B[k] = 0.0
 
-# Outer loop accelerated update for Q
-cdef inline void _outerAccelQ(const float* q, float* q_new, float* q_tmp, const float a, const size_t K) noexcept nogil:
+# EM : Update Q
+cdef inline void _updateEM_Q(float* T, const float* q, float* Q_EM, const float a, const size_t K) noexcept nogil:
     cdef:
         size_t k
-        float sumQ = 0.0
+        float totalQ = 0.0
     for k in prange(K, nogil=True, schedule='static'):
-        q_new[k] = _project(q[k] * q_tmp[k] * a)
-        sumQ += q_new[k]
+        Q_EM[k] = _clip_to_domain(q[k] * T[k] * a)
+        totalQ += Q_EM[k]
     for k in prange(K, nogil=True, schedule='static'):
-        q_new[k] /= sumQ
-        q_tmp[k] = 0.0
+        Q_EM[k] /= totalQ
+        T[k] = 0.0
 
 # ADAM: Update moments for P
 cpdef void updateAdamMomentsP(float[:,::1] P0, const float[:,::1] P1, float[:,::1] m_P, float[:,::1] v_P, const float beta1, const float beta2) noexcept nogil:
     cdef:
         size_t i, j, I = P0.shape[0], J = P0.shape[1]
         float delta
-    for i in prange(I, nogil=True, schedule='guided'):
+    for i in prange(I, nogil=True, schedule='static'):
         for j in range(J):
             delta = P1[i,j] - P0[i,j]
             m_P[i,j] = beta1 * m_P[i,j] + (1.0 - beta1) * delta
@@ -67,11 +54,11 @@ cpdef void updateAdamMomentsQ(float[:,::1] Q0, const float[:,::1] Q1, float[:,::
     cdef:
         size_t i, j, I = Q0.shape[0], J = Q0.shape[1]
         float delta
-    for i in prange(I, nogil=True, schedule='guided'):
+    for i in prange(I, nogil=True, schedule='static'):
         for j in range(J):
             delta = Q1[i,j] - Q0[i,j]
             m_Q[i,j] = beta1 * m_Q[i,j] + (1.0 - beta1) * delta
-            v_Q[i,j] = beta2 * v_Q[i,j] + (1.0 - beta2) * delta * delta
+            v_Q[i,j] = beta2 * v_Q[i,j] + (1.0 - beta2) * delta**2
 
 # ADAM: Apply parameter update for P
 cpdef void applyAdamUpdateP(float[:,::1] P0, const float[:,::1] m_P, const float[:,::1] v_P, 
@@ -89,7 +76,7 @@ cpdef void applyAdamUpdateP(float[:,::1] P0, const float[:,::1] m_P, const float
             m_hat = m_P[i,j] * m_scale
             v_hat = v_P[i,j] * v_scale
             step = alpha * m_hat / (sqrt(v_hat) + epsilon)
-            P0[i,j] = _project(P0[i,j] + step)
+            P0[i,j] = _clip_to_domain(P0[i,j] + step)
 
 # ADAM: Apply parameter update for Q with normalization
 cpdef void applyAdamUpdateQ(float[:,::1] Q0, const float[:,::1] m_Q, 
@@ -109,56 +96,59 @@ cpdef void applyAdamUpdateQ(float[:,::1] Q0, const float[:,::1] m_Q,
             m_hat = m_Q[i, j] * m_scale
             v_hat = v_Q[i, j] * v_scale
             step = alpha * m_hat / (sqrt(v_hat) + epsilon)
-            Q0[i, j] = _project(Q0[i, j] + step)
+            Q0[i, j] = _clip_to_domain(Q0[i, j] + step)
             sumQ += Q0[i, j]
         for j in range(J):
             Q0[i, j] /= sumQ
 
-### Batch functions
-# Update P in batch acceleration
-cpdef void accelBatchP(const unsigned char[:,::1] G, float[:,::1] P, float[:,::1] P_new, 
-                      const float[:,::1] Q, float[:,::1] Q_tmp, float[::1] q_bat, 
-                      const unsigned int[::1] s) noexcept nogil:
+# EM: Apply parameter update for P
+cpdef void P_step(const unsigned char[:,::1] G, float[:,::1] P, float[:,::1] P_EM, 
+                       const float[:,::1] Q, float[:,::1] Q_T, float[::1] q_bat, 
+                       const unsigned int[::1] s) noexcept nogil:
     cdef:
         size_t M = s.shape[0]
         size_t N = G.shape[1]
         size_t K = Q.shape[1]
         size_t i, j, l, x, y
-        float h
+        float rec
         float* p
-        float* p_thr
-        float* q_thr
+        float* A
+        float* B
+        float* t
         float* q_len
         omp.omp_lock_t mutex
     omp.omp_init_lock(&mutex)
     with nogil, parallel():
-        p_thr = <float*>calloc(2*K, sizeof(float))
-        q_thr = <float*>calloc(N*K, sizeof(float))
+        A = <float*>calloc(K, sizeof(float))
+        B = <float*>calloc(K, sizeof(float))
+        t = <float*>calloc(N * K, sizeof(float))
         q_len = <float*>calloc(N, sizeof(float))
+
         for j in prange(M, schedule='dynamic'):
             l = s[j]
-            p = &P[l,0]
+            p = &P[l, 0]
             for i in range(N):
-                if G[l,i] != 9:
+                if G[l, i] != 9:
                     q_len[i] += 1.0
-                    h = _computeH(p, &Q[i,0], K)
-                    _inner(p, &Q[i,0], &p_thr[0], &p_thr[K], &q_thr[i*K], G[l,i], h, K)
-            _outerAccelP(p, &P_new[l,0], &p_thr[0], &p_thr[K], K)
-        
-        # omp critical
+                    rec = _reconstruct(p, &Q[i, 0], K)
+                    _update_temp_factors(A, B, &t[i * K], p, &Q[i, 0], G[l, i], rec, K)
+            _updateEM_P(A, B, p, &P_EM[l, 0], K)
+
         omp.omp_set_lock(&mutex)
         for x in range(N):
             q_bat[x] += q_len[x]
             for y in range(K):
-                Q_tmp[x,y] += q_thr[x*K + y]
+                Q_T[x, y] += t[x * K + y]
         omp.omp_unset_lock(&mutex)
-        free(p_thr)
-        free(q_thr)
+
+        free(A)
+        free(B)
+        free(t)
         free(q_len)
     omp.omp_destroy_lock(&mutex)
 
-# Batch update Q from temp arrays
-cpdef void accelBatchQ(const float[:,::1] Q, float[:,::1] Q_new, float[:,::1] Q_tmp, 
+# EM: Apply parameter update for Q
+cpdef void Q_step(const float[:,::1] Q, float[:,::1] Q_EM, float[:,::1] T, 
                       float[::1] q_bat) noexcept nogil:
     cdef:
         size_t N = Q.shape[0]
@@ -167,5 +157,18 @@ cpdef void accelBatchQ(const float[:,::1] Q, float[:,::1] Q_new, float[:,::1] Q_
         float a
     for i in prange(N, nogil=True, schedule='dynamic'):
         a = 1.0 / (2.0 * q_bat[i])
-        _outerAccelQ(&Q[i, 0], &Q_new[i, 0], &Q_tmp[i, 0], a, K)
+        _updateEM_Q(&T[i, 0], &Q[i, 0], &Q_EM[i, 0], a, K)
         q_bat[i] = 0.0
+
+# Clip parameters to domain
+cdef inline float _clip_to_domain(const float value) noexcept nogil:
+    return fmin(fmax(value, 1e-6), 1.0 - 1e-6)
+
+# Compute reconstruction matrix
+cdef inline float _reconstruct(const float* p, const float* q, const size_t K) noexcept nogil:
+    cdef:
+        size_t k
+        float rec = 0.0
+    for k in range(K):
+        rec += p[k]*q[k]
+    return rec

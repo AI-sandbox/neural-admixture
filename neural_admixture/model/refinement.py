@@ -20,7 +20,7 @@ class AdmixtureDataset(Dataset):
         return len(self.data)
     
     def __getitem__(self, idx):
-        return idx, self.data[idx].float()/2
+        return idx, self.data[idx].masked_fill(self.data[idx] == 9, 0).float() / 2
 
 class AdmixtureOptimizer(nn.Module):
     def __init__(self, init_P, init_Q):
@@ -39,7 +39,8 @@ def refine_Q_P(P, Q, data, device, num_cpus, num_epochs=5, patience=2):
     torch.set_flush_denormal(True)
     
     dataset = AdmixtureDataset(data)
-    batch_size = 512
+    batch_size = min(10240, data.shape[0])
+    log.info(f"    Using {batch_size} batch size.")
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=max(2, min(num_cpus - 1, int(num_cpus * 0.065))), persistent_workers=True) #prefetch_factor=4
     
     model = AdmixtureOptimizer(P, Q)
@@ -52,8 +53,8 @@ def refine_Q_P(P, Q, data, device, num_cpus, num_epochs=5, patience=2):
     best_Q = model.Q.clone().detach()
     recent_losses = deque(maxlen=patience)
     
-    accum_steps = 4
-    optimizer = optim.Adam(model.parameters(), lr=5e-5, fused=True)
+    accum_steps = len(dataloader)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4, fused=True)
 
     for epoch in tqdm(range(num_epochs), desc="Epochs", file=sys.stderr):
         loss_acc = 0.0
@@ -74,16 +75,14 @@ def refine_Q_P(P, Q, data, device, num_cpus, num_epochs=5, patience=2):
             loss = loss / accum_steps
             loss.backward()
 
-            # Step every accum_steps
-            if (i + 1) % accum_steps == 0 or (i + 1) == len(dataloader):
-                optimizer.step()
-                optimizer.zero_grad(set_to_none=True)
+        optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
 
-                with torch.no_grad():
-                    model.P.clamp_(0.0, 1.0)
-                    model.Q.clamp_(0.0, 1.0)
+        with torch.no_grad():
+            model.P.clamp_(0.0, 1.0)
+            model.Q.clamp_(0.0, 1.0)
         
-        log.info(f"    Epoch {epoch+1}, Loss: {loss_acc:.5f}")
+        log.info(f"    Epoch {epoch+1}, Loss: {loss_acc:.7f}")
         
         if loss_acc < best_logl:
             best_logl = loss_acc
@@ -115,17 +114,18 @@ def loglikelihood(Q: torch.Tensor, P: torch.Tensor, data: torch.Tensor, batch_si
     """
     result = 0.0
     N = Q.shape[0]
-    
+
     for init in range(0, N, batch_size):
         end = min(init + batch_size, N)
         Q_batch = Q[init:end]
         data_batch = data[init:end]
-        
+
+        mask = data_batch != 9
         rec_batch = torch.clamp(torch.matmul(Q_batch, P), eps, 1 - eps)
         data_batch = torch.clamp(data_batch, eps, 2 - eps)
 
         loglikelihood_batch = data_batch * torch.log(rec_batch) + (2 - data_batch) * torch.log1p(-rec_batch)
-        
-        result += torch.sum(loglikelihood_batch).item()
-        
+
+        result += torch.sum(loglikelihood_batch[mask]).item()
+
     return result

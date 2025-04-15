@@ -9,14 +9,13 @@ from ..src.utils_c import utils, em
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
-
 # Función principal estilo ADAM
-def adamStep(G, P0, Q0, Q_tmp, P1, Q1, Q_bat, s, 
-             m_P, v_P, m_Q, v_Q, t, 
-             alpha, beta1, beta2, epsilon):
+def adamStep(G, P0, Q0, T, P1, Q1, Q_bat, s, 
+            m_P, v_P, m_Q, v_Q, t, alpha, beta1, beta2, epsilon):
+    
     # Single EM step
-    em.accelBatchP(G, P0, P1, Q0, Q_tmp, Q_bat, s)
-    em.accelBatchQ(Q0, Q1, Q_tmp, Q_bat)
+    em.P_step(G, P0, P1, Q0, T, Q_bat, s)
+    em.Q_step(Q0, Q1, T, Q_bat)
     
     # Update ADAM moments
     em.updateAdamMomentsP(P0, P1, m_P, v_P, beta1, beta2)
@@ -30,6 +29,7 @@ def adamStep(G, P0, Q0, Q_tmp, P1, Q1, Q_bat, s,
     t[0] = t_val
 
 def optimize_parameters(G, P, Q, seed, iterations=1500, batches=32, check=4, tole=1e-2):
+
     M = G.shape[0]
     s = np.arange(M, dtype=np.uint32)
     batch_M = math.ceil(M / batches)
@@ -45,7 +45,7 @@ def optimize_parameters(G, P, Q, seed, iterations=1500, batches=32, check=4, tol
     # Temporal variables
     P1 = np.zeros_like(P, dtype=np.float32)
     Q1 = np.zeros_like(Q, dtype=np.float32)
-    Q_tmp = np.zeros_like(Q, dtype=np.float32)
+    T = np.zeros_like(Q, dtype=np.float32)
     q_bat = np.zeros(G.shape[1], dtype=np.float32)
         
     # Variables for best parameters:
@@ -68,12 +68,12 @@ def optimize_parameters(G, P, Q, seed, iterations=1500, batches=32, check=4, tol
                 s_bat = s[b * batch_M : min((b + 1) * batch_M, M)]
                 
                 # Standard updates
-                adamStep(G, P, Q, Q_tmp, P1, Q1, q_bat, s_bat,
+                adamStep(G, P, Q, T, P1, Q1, q_bat, s_bat,
                         m_P, v_P, m_Q, v_Q, t,
                         alpha=0.0025, beta1=0.80, beta2=0.88, epsilon=1e-8)
         else:
             # Full updates (no mini-batches)
-            adamStep(G, P, Q, Q_tmp, P1, Q1, q_bat, s,
+            adamStep(G, P, Q, T, P1, Q1, q_bat, s,
                     m_P, v_P, m_Q, v_Q, t,
                     alpha=0.0025, beta1=0.80, beta2=0.88, epsilon=1e-8)
         
@@ -160,14 +160,14 @@ def optimize_parameters(G, P, Q, seed, iterations=1500, batches=32, check=4, tol
                 # Check for convergence
                 if abs(L_cur - L_pre) < tole:
                     if L_cur < L_old:  # Use best estimates
-                        P[:], Q[:] = P_old.copy(), Q_old.copy()
+                        P[:], Q[:] = P_old.ravel(), Q_old.ravel()
                         L_cur = L_old
                     log.info(f"    Log-likelihood: {L_cur:.1f}")
                     break
                 else:
                     L_pre = L_cur
                     if L_cur > L_old:  # Update best estimates
-                        P_old[:], Q_old[:] = P.copy(), Q.copy()
+                        P_old[:], Q_old[:] = P.ravel(), Q.copy()
                         L_old = L_cur
             
             ts = time.time()
