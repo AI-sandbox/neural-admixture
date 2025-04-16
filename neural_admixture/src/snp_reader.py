@@ -60,7 +60,7 @@ class SNPReader:
         B.shape = (M, N_bytes)
         
         G = np.zeros((M, N), dtype=np.uint8)
-        utils.expandGeno(B, G)
+        utils.read_bed(B, G)
         del B
         has_missing = bool(np.any(G == 9))
         return G, has_missing

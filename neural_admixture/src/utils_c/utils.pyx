@@ -14,26 +14,33 @@ cdef inline double _reconstruct(const double* p, const double* q, const size_t K
         rec += p[k]*q[k]
     return rec
 
-# Expand data from 2-bit to 8-bit genotype matrix
-cpdef void expandGeno(const unsigned char[:,::1] B, unsigned char[:,::1] G) noexcept nogil:
+# Read Bed data file:
+cpdef void read_bed(const unsigned char[:,::1] bed_source, unsigned char[:,::1] geno_target) noexcept nogil:
     cdef:
-        size_t M = G.shape[0]
-        size_t N = G.shape[1]
-        size_t N_b = B.shape[1]
-        size_t i, j, b, x, bit
-        unsigned char[4] recode = [2, 9, 1, 0]
-        unsigned char mask = 3
-        unsigned char byte
+        size_t n_snps = geno_target.shape[0]
+        size_t n_samples = geno_target.shape[1]
+        size_t byte_count = bed_source.shape[1]
+        size_t snp_idx, byte_pos, byte_offset, sample_pos
+        unsigned char current_byte, geno_value
+        unsigned char[4] lookup_table = [2, 9, 1, 0]
+    
     with nogil, parallel():
-        for j in prange(M):
-            i = 0
-            for b in range(N_b):
-                byte = B[j,b]
-                for bit in range(4):
-                    G[j,i] = recode[(byte >> 2*bit) & mask]
-                    i = i + 1
-                    if i == N:
-                        break
+        for snp_idx in prange(n_snps):
+            for byte_pos in range(byte_count):
+                current_byte = bed_source[snp_idx, byte_pos]
+                sample_pos = byte_pos * 4
+
+                if sample_pos < n_samples:
+                    geno_target[snp_idx, sample_pos] = lookup_table[current_byte & 3]
+                    
+                    if sample_pos + 1 < n_samples:
+                        geno_target[snp_idx, sample_pos + 1] = lookup_table[(current_byte >> 2) & 3]
+                        
+                        if sample_pos + 2 < n_samples:
+                            geno_target[snp_idx, sample_pos + 2] = lookup_table[(current_byte >> 4) & 3]
+                            
+                            if sample_pos + 3 < n_samples:
+                                geno_target[snp_idx, sample_pos + 3] = lookup_table[(current_byte >> 6) & 3]
 
 # Log-likelihood calculation
 cpdef double loglike(const unsigned char[:,::1] G, double[:,::1] P, const double[:,::1] Q) noexcept nogil:

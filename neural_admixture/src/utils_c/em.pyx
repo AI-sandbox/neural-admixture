@@ -38,68 +38,64 @@ cdef inline void _updateEM_Q(float* T, const float* q, float* Q_EM, const float 
         Q_EM[k] /= totalQ
         T[k] = 0.0
 
-# ADAM: Update moments for P
-cpdef void updateAdamMomentsP(float[:,::1] P0, const float[:,::1] P1, float[:,::1] m_P, float[:,::1] v_P, const float beta1, const float beta2) noexcept nogil:
+# ADAM: Update P
+cpdef void adamUpdateP(float[:,::1] P0, const float[:,::1] P1, 
+                      float[:,::1] m_P, float[:,::1] v_P, 
+                      const float alpha, const float beta1, const float beta2, 
+                      const float epsilon, const int t) noexcept nogil:
     cdef:
         size_t i, j, I = P0.shape[0], J = P0.shape[1]
-        float delta
-    for i in prange(I, nogil=True, schedule='static'):
-        for j in range(J):
-            delta = P1[i,j] - P0[i,j]
-            m_P[i,j] = beta1 * m_P[i,j] + (1.0 - beta1) * delta
-            v_P[i,j] = beta2 * v_P[i,j] + (1.0 - beta2) * delta * delta
-
-# ADAM: Update moments for Q
-cpdef void updateAdamMomentsQ(float[:,::1] Q0, const float[:,::1] Q1, float[:,::1] m_Q, float[:,::1] v_Q, const float beta1, const float beta2) noexcept nogil:
-    cdef:
-        size_t i, j, I = Q0.shape[0], J = Q0.shape[1]
-        float delta
-    for i in prange(I, nogil=True, schedule='static'):
-        for j in range(J):
-            delta = Q1[i,j] - Q0[i,j]
-            m_Q[i,j] = beta1 * m_Q[i,j] + (1.0 - beta1) * delta
-            v_Q[i,j] = beta2 * v_Q[i,j] + (1.0 - beta2) * delta**2
-
-# ADAM: Apply parameter update for P
-cpdef void applyAdamUpdateP(float[:,::1] P0, const float[:,::1] m_P, const float[:,::1] v_P, 
-                          const float alpha, const float beta1, const float beta2, 
-                          const float epsilon, const int t) noexcept nogil:
-    cdef:
-        size_t i, j, I = P0.shape[0], J = P0.shape[1]
-        float m_hat, v_hat, step
+        float delta, m_hat, v_hat, step
         float beta1_t = pow(beta1, t)
         float beta2_t = pow(beta2, t)
         float m_scale = 1.0 / (1.0 - beta1_t) if beta1_t != 1.0 else 1.0
         float v_scale = 1.0 / (1.0 - beta2_t) if beta2_t != 1.0 else 1.0
-    for i in prange(I, nogil=True, schedule='guided'):
+    
+    for i in prange(I, nogil=True, schedule='static'):
         for j in range(J):
+            # Update moments
+            delta = P1[i,j] - P0[i,j]
+            m_P[i,j] = beta1 * m_P[i,j] + (1.0 - beta1) * delta
+            v_P[i,j] = beta2 * v_P[i,j] + (1.0 - beta2) * delta * delta
+            
+            # Apply updates
             m_hat = m_P[i,j] * m_scale
             v_hat = v_P[i,j] * v_scale
             step = alpha * m_hat / (sqrt(v_hat) + epsilon)
             P0[i,j] = _clip_to_domain(P0[i,j] + step)
 
-# ADAM: Apply parameter update for Q with normalization
-cpdef void applyAdamUpdateQ(float[:,::1] Q0, const float[:,::1] m_Q, 
-                           const float[:,::1] v_Q, float alpha, 
-                           float beta1, float beta2, float epsilon, 
-                           int t) noexcept nogil:
+# ADAM: Update Q
+cpdef void adamUpdateQ(float[:,::1] Q0, const float[:,::1] Q1, 
+                      float[:,::1] m_Q, float[:,::1] v_Q, 
+                      const float alpha, const float beta1, const float beta2, 
+                      const float epsilon, const int t) noexcept nogil:
     cdef:
         size_t i, j, I = Q0.shape[0], J = Q0.shape[1]
-        float m_hat, v_hat, step, sumQ = 0.0
+        float delta, m_hat, v_hat, step, sumQ = 0.0
         float beta1_t = pow(beta1, t)
         float beta2_t = pow(beta2, t)
         float m_scale = 1.0 / (1.0 - beta1_t) if beta1_t != 1.0 else 1.0
         float v_scale = 1.0 / (1.0 - beta2_t) if beta2_t != 1.0 else 1.0
-    for i in prange(I, nogil=True, schedule='guided'):
+    
+    for i in prange(I, nogil=True, schedule='static'):
         sumQ = 0.0
         for j in range(J):
-            m_hat = m_Q[i, j] * m_scale
-            v_hat = v_Q[i, j] * v_scale
+            # Update moments
+            delta = Q1[i,j] - Q0[i,j]
+            m_Q[i,j] = beta1 * m_Q[i,j] + (1.0 - beta1) * delta
+            v_Q[i,j] = beta2 * v_Q[i,j] + (1.0 - beta2) * delta * delta
+            
+            # Apply updates
+            m_hat = m_Q[i,j] * m_scale
+            v_hat = v_Q[i,j] * v_scale
             step = alpha * m_hat / (sqrt(v_hat) + epsilon)
-            Q0[i, j] = _clip_to_domain(Q0[i, j] + step)
-            sumQ += Q0[i, j]
+            Q0[i,j] = _clip_to_domain(Q0[i,j] + step)
+
+            # Normalization
+            sumQ += Q0[i,j]
+        
         for j in range(J):
-            Q0[i, j] /= sumQ
+            Q0[i,j] /= sumQ
 
 # EM: Apply parameter update for P
 cpdef void P_step(const unsigned char[:,::1] G, float[:,::1] P, float[:,::1] P_EM, 
@@ -162,7 +158,7 @@ cpdef void Q_step(const float[:,::1] Q, float[:,::1] Q_EM, float[:,::1] T,
 
 # Clip parameters to domain
 cdef inline float _clip_to_domain(const float value) noexcept nogil:
-    return fmin(fmax(value, 1e-6), 1.0 - 1e-6)
+    return fmin(fmax(value, 5e-6), 1.0 - 5e-6)
 
 # Compute reconstruction matrix
 cdef inline float _reconstruct(const float* p, const float* q, const size_t K) noexcept nogil:
