@@ -81,8 +81,8 @@ class RandomInitialization(object):
         gmm.fit(X_pca)
         
         # ADAM EM:
-        P = np.ascontiguousarray(np.clip((gmm.means_@V).T, 1e-5, 1 - 1e-5), dtype=np.float32)
-        Q = np.clip(gmm.predict_proba(X_pca).astype(np.float32), 1e-5, 1 - 1e-5)
+        P = np.ascontiguousarray(np.clip((gmm.means_@V).T, 5e-6, 1 - 5e-6), dtype=np.float32)
+        Q = np.clip(gmm.predict_proba(X_pca).astype(np.float32), 5e-6, 1 - 5e-6)
 
         log.info("    Adam expectation maximization running...")
         log.info("")
