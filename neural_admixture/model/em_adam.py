@@ -9,7 +9,6 @@ from ..src.utils_c import utils, em
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
-# Función principal estilo ADAM optimizada
 def adamStep(G, P0, Q0, T, P1, Q1, Q_bat, s, 
             m_P, v_P, m_Q, v_Q, t, alpha, beta1, beta2, epsilon):
     
@@ -17,7 +16,7 @@ def adamStep(G, P0, Q0, T, P1, Q1, Q_bat, s,
     em.P_step(G, P0, P1, Q0, T, Q_bat, s)
     em.Q_step(Q0, Q1, T, Q_bat)
     
-    # Apply ADAM updates with combined function
+    # Apply ADAM updates
     t_val = t[0] + 1
     em.adamUpdateP(P0, P1, m_P, v_P, alpha, beta1, beta2, epsilon, t_val)
     em.adamUpdateQ(Q0, Q1, m_Q, v_Q, alpha, beta1, beta2, epsilon, t_val)
@@ -48,7 +47,7 @@ def optimize_parameters(G, P, Q, seed, iterations=1500, batches=32, check=4, tol
     P_old, Q_old = P.copy(), Q.copy()
     
     # Parameters for convergence tracking
-    L_old = float('-inf')  # Inicializado con -inf en lugar de calcular
+    L_old = float('-inf')
     L_bat = L_pre = float('-inf')
     ts = time.time()
     
@@ -63,12 +62,10 @@ def optimize_parameters(G, P, Q, seed, iterations=1500, batches=32, check=4, tol
             for b in range(batches):
                 s_bat = s[b * batch_M : min((b + 1) * batch_M, M)]
                 
-                # Standard updates
                 adamStep(G, P, Q, T, P1, Q1, q_bat, s_bat,
                         m_P, v_P, m_Q, v_Q, t,
                         alpha=0.0025, beta1=0.80, beta2=0.88, epsilon=1e-8)
         else:
-            # Full updates (no mini-batches)
             adamStep(G, P, Q, T, P1, Q1, q_bat, s,
                     m_P, v_P, m_Q, v_Q, t,
                     alpha=0.0025, beta1=0.80, beta2=0.88, epsilon=1e-8)
@@ -79,12 +76,10 @@ def optimize_parameters(G, P, Q, seed, iterations=1500, batches=32, check=4, tol
                 L_cur = utils.loglike(G, P.astype(np.float64), Q.astype(np.float64))
                 log.info(f"    Iteration {it+1}: \tLog-likelihood: {L_cur:.1f}\t({time.time()-ts:.3f}s)")
                 
-                # Primera iteración: inicializar valores de referencia
                 if L_pre == float('-inf'):
                     L_pre = L_cur
                     L_bat = L_cur
                     L_best_check = L_cur
-                    # Actualizar mejores parámetros
                     P_old[:], Q_old[:] = P.copy(), Q.copy()
                     L_old = L_cur
                     ts = time.time()
@@ -97,7 +92,6 @@ def optimize_parameters(G, P, Q, seed, iterations=1500, batches=32, check=4, tol
                         log.info("")
                         log.info("    Stopping early: Log-likelihood worsened twice consecutively.")
                         log.info("")
-                        # Use best parameters
                         P[:], Q[:] = P_old.copy(), Q_old.copy()
                         L_cur = L_old
                         log.info(f"    Log-likelihood: {L_old:.1f}")
@@ -108,29 +102,26 @@ def optimize_parameters(G, P, Q, seed, iterations=1500, batches=32, check=4, tol
                 
                 # Check for halving
                 if (L_cur < L_bat) or (abs(L_cur - L_bat) < tole):
-                    batches = batches // 2  # Halve number of batches
+                    batches = batches // 2
                     if batches > 1:
                         log.info(f"    Using {batches} mini-batches...")
                         L_bat = float('-inf')
                         batch_M = math.ceil(M / batches)
                         L_pre = L_cur
                     else:
-                        # Turn off mini-batch acceleration
                         log.info(f"    Using {batches} batch...")
                 else:
                     L_bat = L_cur
-                    if L_cur > L_old:  # Update best estimates
+                    if L_cur > L_old:
                         P_old[:], Q_old[:] = P.copy(), Q.copy()
                         L_old = L_cur
             else:
                 L_cur = utils.loglike(G, P.astype(np.float64), Q.astype(np.float64))
                 log.info(f"    Iteration {it+1}: \tLog-likelihood: {L_cur:.1f}\t({time.time()-ts:.3f}s)")
                 
-                # Primera iteración: inicializar valores de referencia
                 if L_pre == float('-inf'):
                     L_pre = L_cur
                     L_best_check = L_cur
-                    # Actualizar mejores parámetros
                     P_old[:], Q_old[:] = P.copy(), Q.copy()
                     L_old = L_cur
                     ts = time.time()
