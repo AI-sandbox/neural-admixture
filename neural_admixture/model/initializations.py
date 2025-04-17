@@ -54,16 +54,18 @@ class RandomInitialization(object):
         
         t0 = time.time()
         
+        # SVD:
         with dask.config.set({"random.seed": seed}):
-            data_dask = da.from_array(data.T, chunks=(768, 768))
+            data_dask = da.from_array(data.T, chunks=(512, 512))
             if np.any(data == 9):
                 data_dask = da.where(data_dask == 9, 0, data_dask)
             log.info("    Data dask matrix created")
             _, _, V = da.linalg.svd_compressed(data_dask, k=K, compute=True, n_power_iter=0, iterator='power', n_oversamples=10)
         log.info("    V matrix created")
+        V=V.persist()
         V=V.compute().astype(np.float32)
+        del data_dask
         t1 = time.time()
-        
         log.info(f"    Time spent in svd: {t1-t0:.2f}s")
         
         # PCA:
@@ -79,26 +81,30 @@ class RandomInitialization(object):
         log.info("")
         gmm = GaussianMixture(n_components=K, n_init=5, init_params='k-means++', tol=1e-4, covariance_type='full', max_iter=100, random_state=seed)        
         gmm.fit(X_pca)
+    
+        P = np.ascontiguousarray(np.clip((gmm.means_@V).T, 5e-6, 1 - 5e-6), dtype=np.float32)
+        del V
+        Q = np.clip(gmm.predict_proba(X_pca).astype(np.float32), 5e-6, 1 - 5e-6)
+        del X_pca
+        del gmm
         
         # ADAM EM:
-        P = np.ascontiguousarray(np.clip((gmm.means_@V).T, 5e-6, 1 - 5e-6), dtype=np.float32)
-        Q = np.clip(gmm.predict_proba(X_pca).astype(np.float32), 5e-6, 1 - 5e-6)
-
         log.info("    Adam expectation maximization running...")
         log.info("")
         P, Q = optimize_parameters(data, P, Q, seed)
+        del data
         
         # REFINEMENT:
-        log.info("    Refinement algorithm running...")
-        log.info("")
-        P = torch.as_tensor(P.T, dtype=torch.float32, device=device)
-        Q = torch.as_tensor(Q, dtype=torch.float32, device=device)
-        data = torch.as_tensor(data.T, dtype=torch.uint8)
+        #log.info("    Refinement algorithm running...")
+        #log.info("")
+        #P = torch.as_tensor(P.T, dtype=torch.float32, device=device)
+        #Q = torch.as_tensor(Q, dtype=torch.float32, device=device)
+        #data = torch.as_tensor(data.T, dtype=torch.uint8)
         
-        P, Q = refine_Q_P(P, Q, data, device, num_cpus, num_epochs=5, patience=2)
+        #P, Q = refine_Q_P(P, Q, data, device, num_cpus, num_epochs=5, patience=2)
         
-        logl = loglikelihood(Q, P, data)
-        log.info("")
-        log.info(f"    Final log-likelihood: {logl:.1f}")  
+        #logl = loglikelihood(Q, P, data)
+        #log.info("")
+        #log.info(f"    Final log-likelihood: {logl:.1f}")  
 
         return P, Q
