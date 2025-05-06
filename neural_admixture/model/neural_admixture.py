@@ -266,8 +266,8 @@ class NeuralAdmixture():
             dataloader = dataloader_admixture(data, batch_size_inference_Q, 1 if self.num_gpus >= 1 else 0, self.seed, self.generator, self.pin, y,
                                             self.num_cpus, shuffle=False, num_workers=4)
             for x_step in dataloader:
-                unpacked_step = torch.zeros((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
-                pack2bit.unpack2bit_gpu_to_gpu_batched(x_step, unpacked_step)
+                unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
+                pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
                 out, _ = self.model(unpacked_step)
                 Q = torch.cat((Q, out), dim=0)
         if self.num_gpus>1:
@@ -291,8 +291,8 @@ class NeuralAdmixture():
         """
         loss_acc = 0
         for x_step in dataloader:
-            unpacked_step = torch.zeros((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
-            pack2bit.unpack2bit_gpu_to_gpu_batched(x_step, unpacked_step)
+            unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
+            pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
             loss = self._run_step(unpacked_step)
             loss.backward()
             self.optimizer.step()
@@ -458,11 +458,11 @@ class NeuralAdmixture():
                 Q_batch = Q[start_idx:end_idx, :]
                 
                 data_batch = data[start_idx:end_idx, :]
-                unpacked_step = torch.zeros((data_batch.shape[0], M), dtype=torch.uint8, device=device)
-                pack2bit.unpack2bit_gpu_to_gpu_batched(data_batch, unpacked_step)
+                unpacked_step = torch.empty((data_batch.shape[0], M), dtype=torch.uint8, device=device)
+                pack2bit.unpack2bit_gpu_to_gpu(data_batch, unpacked_step)
                 
-                unpacked_step = torch.clamp(unpacked_step, eps, 2 - eps)
-                rec_batch = torch.clamp(torch.matmul(Q_batch, P), eps, 1 - eps)
+                unpacked_step = torch.clamp_(unpacked_step, eps, 2 - eps)
+                rec_batch = torch.clamp_(torch.matmul(Q_batch, P), eps, 1 - eps)
 
                 loglikelihood_batch = unpacked_step * torch.log(rec_batch) + (2 - unpacked_step) * torch.log1p(-rec_batch)
 

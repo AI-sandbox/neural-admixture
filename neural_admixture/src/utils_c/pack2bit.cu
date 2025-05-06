@@ -116,52 +116,32 @@ void pack2bit_cpu_to_gpu_cuda(torch::Tensor input_cpu, torch::Tensor output_gpu)
     }
 }
 
-// Función para descomprimir datos desde GPU y dejar el resultado en GPU (con batcheo)
-void unpack2bit_gpu_to_gpu_batched_cuda(torch::Tensor input_gpu, torch::Tensor output_gpu) {
-    // Verificar que los tensores estén en los dispositivos correctos
+// Función para descomprimir datos desde GPU y dejar el resultado en GPU
+void unpack2bit_gpu_to_gpu(torch::Tensor input_gpu, torch::Tensor output_gpu) {
     TORCH_CHECK(input_gpu.device().is_cuda(), "Input tensor must be on CUDA device");
     TORCH_CHECK(output_gpu.device().is_cuda(), "Output tensor must be on CUDA device");
-    // Verificar que ambos tensores están en el MISMO dispositivo CUDA
     TORCH_CHECK(input_gpu.get_device() == output_gpu.get_device(), "Input and Output tensors must be on the same CUDA device");
 
-
-    int N = output_gpu.size(0); // N se toma del tensor de salida (tamaño descomprimido)
+    int N = output_gpu.size(0);
     int M = output_gpu.size(1);
     int packed_cols = (M + 3) / 4;
 
-    // Verificar que las dimensiones del input empaquetado coinciden
     TORCH_CHECK(input_gpu.size(0) == N, "Input tensor row dimension mismatch");
     TORCH_CHECK(input_gpu.size(1) == packed_cols, "Input tensor column dimension mismatch based on output shape");
 
-    // Determinar el tamaño del batch
-    int rows_per_batch = std::min(MAX_ROWS_PER_BATCH, N);
-
-    // Configuración de grid y bloques
     dim3 threads(THREADS_PER_BLOCK);
+    dim3 blocks((packed_cols + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, N);
 
-    // Procesar por lotes
-    for (int start_row = 0; start_row < N; start_row += rows_per_batch) {
-        int current_batch_rows = std::min(rows_per_batch, N - start_row);
+    unpack2bit_kernel<<<blocks, threads>>>(
+        input_gpu.data_ptr<uint8_t>(),
+        output_gpu.data_ptr<uint8_t>(),
+        N, M, packed_cols
+    );
 
-        // Crear vistas para el batch actual en GPU (input y output)
-        auto input_gpu_batch_view = input_gpu.slice(0, start_row, start_row + current_batch_rows);
-        auto output_gpu_batch_view = output_gpu.slice(0, start_row, start_row + current_batch_rows);
-
-        // Configurar grid para este batch
-        dim3 blocks((packed_cols + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, current_batch_rows);
-
-        // Lanzar kernel escribiendo directamente en la vista del tensor de salida en GPU
-        unpack2bit_kernel<<<blocks, threads>>>(
-            input_gpu_batch_view.data_ptr<uint8_t>(),
-            output_gpu_batch_view.data_ptr<uint8_t>(),
-            current_batch_rows, M, packed_cols
-        );
-
-        cudaDeviceSynchronize();
-    }
+    cudaDeviceSynchronize();
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("pack2bit_cpu_to_gpu", &pack2bit_cpu_to_gpu_cuda, "Pack 2-bit values from CPU tensor to GPU tensor (batched)");
-    m.def("unpack2bit_gpu_to_gpu_batched", &unpack2bit_gpu_to_gpu_batched_cuda, "Unpack 2-bit values from GPU tensor to GPU tensor (batched)");
+    m.def("unpack2bit_gpu_to_gpu", &unpack2bit_gpu_to_gpu, "Unpack 2-bit values from GPU tensor to GPU tensor (batched)");
 }

@@ -110,7 +110,7 @@ class RandomInitialization(object):
             V = torch.as_tensor(V.T, dtype=torch.float32, device=device).contiguous()
 
         data = torch.as_tensor(data.T, dtype=torch.uint8, device='cpu')
-        packed_data = torch.zeros((N, (M + 3) // 4), dtype=torch.uint8, device=device)
+        packed_data = torch.empty((N, (M + 3) // 4), dtype=torch.uint8, device=device)
         pack2bit.pack2bit_cpu_to_gpu(data, packed_data)
         
         model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device, master, num_cpus)
