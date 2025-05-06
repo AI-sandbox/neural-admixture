@@ -29,9 +29,9 @@ class SNPReader:
         # desempacar 2 bits → 4 genotipos
         shifts = np.array([0,2,4,6], dtype=np.uint8)
         codes = (B[..., None] >> shifts) & 3
-        lookup = np.array([2,9,1,0], dtype=np.uint8)
+        lookup = np.array([2,3,1,0], dtype=np.uint8)
         G = lookup[codes].reshape(M, N_bytes*4)[:,:N]
-        has_missing = bool(np.any(G==9))
+        has_missing = bool(np.any(G==3))
         return G, has_missing
     
     def read_data(self, file: str, master: bool) -> np.ndarray:

@@ -77,7 +77,7 @@ class Q_P(torch.nn.Module):
             torch.Tensor: The result of the forward pass, which is either probabilities or a transformed tensor clamped between 0 and 1.
         """
         X = X.float() / 2
-        X = torch.where(X == 4.5, 0.0, X)
+        X = torch.where(X == 1.5, 0.0, X)
         
         X_pca = X@self.V
         X_pca = self.batch_norm(X_pca)

@@ -124,7 +124,7 @@ cpdef void P_step(const unsigned char[:,::1] G, float[:,::1] P, float[:,::1] P_E
             l = s[j]
             p = &P[l, 0]
             for i in range(N):
-                if G[l, i] != 9:
+                if G[l, i] != 3:
                     q_len[i] += 1.0
                     rec = _reconstruct(p, &Q[i, 0], K)
                     _update_temp_factors(A, B, &t[i * K], p, &Q[i, 0], G[l, i], rec, K)
