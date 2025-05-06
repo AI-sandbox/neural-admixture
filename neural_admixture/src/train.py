@@ -5,7 +5,6 @@ import sys
 import time
 import torch
 from pathlib import Path
-from sklearn.model_selection import KFold
 from typing import List
 from argparse import ArgumentError, ArgumentTypeError
 from pathlib import Path

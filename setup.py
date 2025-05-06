@@ -1,6 +1,13 @@
+import numpy
+import os
+os.environ['TORCH_CUDA_ARCH_LIST'] = "9.0"
+
 from setuptools import setup, Extension
 from Cython.Build import cythonize
-import numpy
+from torch.utils.cpp_extension import BuildExtension, CUDAExtension
+
+os.environ['CC'] = 'gcc'
+os.environ['CXX'] = 'g++'
 
 extensions = [
     Extension(
@@ -15,4 +22,16 @@ extensions = [
 
 setup(
     ext_modules=cythonize(extensions),
+)
+
+setup(
+    ext_modules=[
+        CUDAExtension(
+            name='neural_admixture.src.utils_c.pack2bit',
+            sources=['neural_admixture/src/utils_c/pack2bit.cu'],
+        )
+    ],
+    cmdclass={
+        'build_ext': BuildExtension
+    }
 )

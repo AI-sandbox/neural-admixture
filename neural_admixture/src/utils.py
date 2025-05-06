@@ -6,9 +6,6 @@ import sys
 import socket
 import numpy as np
 import torch
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 from pathlib import Path
 from typing import List, Tuple
@@ -167,55 +164,9 @@ def ddp_setup(stage: str, rank: int, num_gpus: int) -> None:
             os.environ["MASTER_ADDR"] = "localhost"
             os.environ["MASTER_PORT"] = str(find_free_port(12355))
             torch.cuda.set_device(rank)
-            torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=num_gpus)
+            torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=num_gpus, device_id=torch.device(f'cuda:{int(rank)}'))
         else:
             torch.distributed.destroy_process_group()
-
-def process_cv_loglikelihood(cv_loglikelihood: list) -> pd.DataFrame:
-    """
-    Process cross-validation errors and return a reduced DataFrame with mean and standard deviation.
-
-    Args:
-        cv_loglikelihood (list): List of cross-validation error records.
-
-    Returns:
-        pandas.DataFrame: Processed DataFrame with mean and standard deviation for each K.
-    """
-    cv_loglikelihood_df = pd.DataFrame.from_records(cv_loglikelihood)
-    cv_loglikelihood_reduced = pd.DataFrame(cv_loglikelihood_df.mean(), columns=["cv_loglikelihood_mean"])
-    cv_loglikelihood_reduced["K"] = cv_loglikelihood_reduced.index.copy()
-    cv_loglikelihood_reduced["cv_loglikelihood_std"] = cv_loglikelihood_df.std()
-    cv_loglikelihood_reduced = cv_loglikelihood_reduced.sort_values("K")
-    
-    return cv_loglikelihood_reduced
-
-def save_cv_error_plot(cv_loglikelihood_reduced: pd.DataFrame, save_dir: str) -> None:
-    """
-    Create and save a plot of cross-validation loglikelihood against K.
-
-    Args:
-        cv_loglikelihood_reduced (pandas.DataFrame): DataFrame with mean and standard deviation of cross-validation loglikelihoods.
-        save_dir (str): Directory where the plot should be saved.
-
-    Returns:
-        None
-    """
-    sns.set_style("whitegrid")
-    plt.figure(figsize=(10, 6))
-    loglikelihood_plot = sns.lineplot(
-        x='K', y='cv_loglikelihood_mean', data=cv_loglikelihood_reduced, marker='o', 
-        err_style="bars"
-    )
-    loglikelihood_plot.set_title('Cross-validation Log Likelihood vs K', fontsize=18)
-    loglikelihood_plot.set_xlabel('K', fontsize=14)
-    loglikelihood_plot.set_ylabel('Cross-validation Log Likelihood', fontsize=14)
-    plt.xticks(fontsize=12)
-    plt.yticks(fontsize=12)
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    plot_file_name = os.path.join(save_dir, 'cv_loglikelihood_plot.png')
-    plt.savefig(plot_file_name)
-    plt.close()
     
 def set_seed(seed: int) -> None:
     """

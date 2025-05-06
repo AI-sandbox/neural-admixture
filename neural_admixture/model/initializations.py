@@ -6,15 +6,18 @@ import torch
 import time
 import dask.array as da
 import dask
+import torch.distributed as dist
 
 from sklearn.mixture import GaussianMixture as GaussianMixture
 from typing import Tuple
 
-
+from .neural_admixture import NeuralAdmixture
 from .em_adam import optimize_parameters
-from .refinement import refine_Q_P, loglikelihood
+from ..src.utils_c import pack2bit
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
+logging.getLogger("distributed").setLevel(logging.WARNING)
+
 log = logging.getLogger(__name__)
 
 class RandomInitialization(object):
@@ -55,56 +58,63 @@ class RandomInitialization(object):
         t0 = time.time()
         
         # SVD:
-        with dask.config.set({"random.seed": seed}):
-            data_dask = da.from_array(data.T, chunks=(512, 512))
-            if np.any(data == 9):
-                data_dask = da.where(data_dask == 9, 0, data_dask)
-            log.info("    Data dask matrix created")
-            _, _, V = da.linalg.svd_compressed(data_dask, k=K, compute=True, n_power_iter=0, iterator='power', n_oversamples=10)
-        log.info("    V matrix created")
-        V=V.persist()
-        V=V.compute().astype(np.float32)
-        del data_dask
-        t1 = time.time()
-        log.info(f"    Time spent in svd: {t1-t0:.2f}s")
+        if master:
+            dask.config.set({"optimization.fuse.ave-width": 5})
+            with dask.config.set({"random.seed": seed}):
+                data_dask = da.from_array(data.T, chunks=(N, 100_000), asarray=False)
+                if np.any(data == 9):
+                    data_dask = da.where(data_dask == 9, 0, data_dask)
+                data_dask = data_dask.persist()
+                _, _, V = da.linalg.svd_compressed(data_dask, k=K, seed=da.random.RandomState(RandomState=np.random.RandomState), compute=True) 
+            V = V.compute()
+            del data_dask
+            t1 = time.time()
+            log.info(f"    Time spent in SVD: {t1-t0:.2f}s")
+            
+            # PCA:
+            X_pca = np.zeros((N, K), dtype=np.float32)
+            for i in range(0, N, 1024):
+                end_idx = min(i + 1024, N)
+                batch = data[:, i:end_idx].T.astype(np.float32)/2
+                X_pca[i:end_idx] = batch@V.T
+            
+            # GMM:
+            log.info("")
+            log.info("    Running Gaussian Mixture in PCA subspace...")
+            log.info("")
+            gmm = GaussianMixture(n_components=K, n_init=5, init_params='k-means++', tol=1e-4, covariance_type='full', max_iter=100, random_state=seed)        
+            gmm.fit(X_pca)
+            del X_pca
+            
+            P = np.ascontiguousarray(np.clip((gmm.means_@V).T, 5e-6, 1 - 5e-6), dtype=np.float32)
+            del gmm
         
-        # PCA:
-        X_pca = np.zeros((N, K), dtype=np.float32)
-        for i in range(0, N, 1024):
-            end_idx = min(i + 1024, N)
-            batch = data[:, i:end_idx].T.astype(np.float32)/2
-            X_pca[i:end_idx] = batch@V.T
-        
-        # GMM:
-        log.info("")
-        log.info("    Running Gaussian Mixture in PCA subspace...")
-        log.info("")
-        gmm = GaussianMixture(n_components=K, n_init=5, init_params='k-means++', tol=1e-4, covariance_type='full', max_iter=100, random_state=seed)        
-        gmm.fit(X_pca)
-    
-        P = np.ascontiguousarray(np.clip((gmm.means_@V).T, 5e-6, 1 - 5e-6), dtype=np.float32)
-        del V
-        Q = np.clip(gmm.predict_proba(X_pca).astype(np.float32), 5e-6, 1 - 5e-6)
-        del X_pca
-        del gmm
-        
-        # ADAM EM:
-        log.info("    Adam expectation maximization running...")
-        log.info("")
-        P, Q = optimize_parameters(data, P, Q, seed)
-        del data
-        
-        # REFINEMENT:
-        #log.info("    Refinement algorithm running...")
-        #log.info("")
-        #P = torch.as_tensor(P.T, dtype=torch.float32, device=device)
-        #Q = torch.as_tensor(Q, dtype=torch.float32, device=device)
-        #data = torch.as_tensor(data.T, dtype=torch.uint8)
-        
-        #P, Q = refine_Q_P(P, Q, data, device, num_cpus, num_epochs=5, patience=2)
-        
-        #logl = loglikelihood(Q, P, data)
-        #log.info("")
-        #log.info(f"    Final log-likelihood: {logl:.1f}")  
+        if torch.distributed.is_initialized():    
+            dist.barrier()
+        if num_gpus>1:
+            if master:
+                P_init = torch.as_tensor(P, dtype=torch.float32, device=device).contiguous()
+                V = torch.as_tensor(V.T, dtype=torch.float32, device=device).contiguous()
+            else:
+                P_init = torch.empty((M, K), dtype=torch.float32, device=device)
+                V = torch.empty((M, K), dtype=torch.float32, device=device)
+            
+            log.info("    Broadcasting to all GPUs...")
+            dist.broadcast(P_init, src=0)
+            dist.broadcast(V, src=0)
+            dist.barrier()
+            log.info("    Finished broadcasting!")
 
+        else:
+            P_init = torch.as_tensor(P, dtype=torch.float32, device=device).contiguous()
+            V = torch.as_tensor(V.T, dtype=torch.float32, device=device).contiguous()
+
+        data = torch.as_tensor(data.T, dtype=torch.uint8, device='cpu')
+        packed_data = torch.zeros((N, (M + 3) // 4), dtype=torch.uint8, device=device)
+        pack2bit.pack2bit_cpu_to_gpu(data, packed_data)
+        
+        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device, master, num_cpus)
+        
+        P, Q, _ = model.launch_training(P_init, packed_data, hidden_size, V.shape[1], K, activation, V, M, N)
+        
         return P, Q
