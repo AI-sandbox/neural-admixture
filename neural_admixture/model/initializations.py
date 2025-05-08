@@ -1,4 +1,5 @@
 import logging
+import os
 import numpy as np
 import sys
 
@@ -7,13 +8,13 @@ import time
 import dask.array as da
 import dask
 import torch.distributed as dist
+from torch.utils.cpp_extension import load
 
 from sklearn.mixture import GaussianMixture as GaussianMixture
 from typing import Tuple
 
 from .neural_admixture import NeuralAdmixture
 from .em_adam import optimize_parameters
-from ..src.utils_c import pack2bit
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 logging.getLogger("distributed").setLevel(logging.WARNING)
@@ -111,9 +112,12 @@ class RandomInitialization(object):
 
         data = torch.as_tensor(data.T, dtype=torch.uint8, device='cpu')
         packed_data = torch.empty((N, (M + 3) // 4), dtype=torch.uint8, device=device)
+        
+        source_path = os.path.abspath("neural_admixture/src/utils_c/pack2bit.cu")
+        pack2bit = load(name="pack2bit", sources=[source_path], verbose=True)
         pack2bit.pack2bit_cpu_to_gpu(data, packed_data)
         
-        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device, master, num_cpus)
+        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device, master, num_cpus, pack2bit)
         
         P, Q, _ = model.launch_training(P_init, packed_data, hidden_size, V.shape[1], K, activation, V, M, N)
         

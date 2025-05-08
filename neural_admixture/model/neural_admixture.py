@@ -8,7 +8,7 @@ from typing import Callable, Optional, Tuple
 from tqdm.auto import tqdm
 
 from ..src.loaders import dataloader_admixture
-from ..src.utils_c import pack2bit
+#from ..src.utils_c import pack2bit
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
@@ -150,7 +150,7 @@ class NeuralAdmixture():
             device_tensors (torch.device): Device for tensor data.
     """
     def __init__(self, k: int, epochs: int, batch_size: int, learning_rate: float, device: torch.device, seed: int, num_gpus: int,
-                device_tensors: torch.device, master: bool, num_cpus: int, supervised_loss_weight: Optional[float]=None):
+                device_tensors: torch.device, master: bool, num_cpus: int, pack2bit, supervised_loss_weight: Optional[float]=None):
         """
         Initializes the NeuralAdmixture class with training parameters and settings.
 
@@ -188,6 +188,9 @@ class NeuralAdmixture():
         # Supervised version:
         self.supervised_loss_weight = supervised_loss_weight
         self.loss_function_supervised = torch.nn.CrossEntropyLoss(reduction='sum')
+        
+        #Pack2bit function
+        self.pack2bit = pack2bit
         
     def initialize_model(self, p_tensor: torch.Tensor, hidden_size: int, num_features: int, 
                          k: int, activation: torch.nn.Module, V: torch.Tensor) -> None:
@@ -267,7 +270,7 @@ class NeuralAdmixture():
                                             self.num_cpus, shuffle=False, num_workers=4)
             for x_step in dataloader:
                 unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
-                pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
+                self.pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
                 out, _ = self.model(unpacked_step)
                 Q = torch.cat((Q, out), dim=0)
         if self.num_gpus>1:
@@ -292,7 +295,7 @@ class NeuralAdmixture():
         loss_acc = 0
         for x_step in dataloader:
             unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
-            pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
+            self.pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
             loss = self._run_step(unpacked_step)
             loss.backward()
             self.optimizer.step()
@@ -407,7 +410,7 @@ class NeuralAdmixture():
         Details:
             - Computes and logs the log-likelihood of the model given the data.
         """
-        self._loglikelihood(Q, self.raw_model.P.data.detach().T, data, self.master, self.M, self.device)
+        self._loglikelihood(Q, self.raw_model.P.data.detach().T, data, self.master, self.M, self.device, self.pack2bit)
         
         return self.raw_model.P.data.detach().cpu().numpy(), Q.cpu().numpy(), self.raw_model
     
@@ -436,7 +439,7 @@ class NeuralAdmixture():
         
     @staticmethod
     def _loglikelihood(Q: torch.Tensor, P: torch.Tensor, data: torch.Tensor,
-                      master: bool, M: int, device: torch.device, eps: float = 1e-7) -> None:
+                      master: bool, M: int, device: torch.device, pack2bit, eps: float = 1e-7) -> None:
         """Compute deviance for a single K using PyTorch tensors in batches of 2048 samples.
 
         Args:
