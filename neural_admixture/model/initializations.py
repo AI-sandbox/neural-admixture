@@ -16,6 +16,8 @@ from typing import Tuple
 from .neural_admixture import NeuralAdmixture
 from .em_adam import optimize_parameters
 
+from ..src.utils_c import rsvd
+
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 logging.getLogger("distributed").setLevel(logging.WARNING)
 
@@ -58,28 +60,18 @@ class RandomInitialization(object):
             log.info("    Running Random initialization...")
 
         M, N = data.shape
-        
-        t0 = time.time()
-        
-        # SVD:
+
+        data = np.ascontiguousarray(data.T)
+    
         if master:
-            dask.config.set({"optimization.fuse.ave-width": 5})
-            with dask.config.set({"random.seed": seed}):
-                data_dask = da.from_array(data.T, chunks=(N, 100_000), asarray=False)
-                if np.any(data == 9):
-                    data_dask = da.where(data_dask == 3, 0, data_dask)
-                data_dask = data_dask.persist()
-                _, _, V = da.linalg.svd_compressed(data_dask, k=K, seed=da.random.RandomState(RandomState=np.random.RandomState), compute=True) 
-            V = V.compute()
-            del data_dask
-            t1 = time.time()
-            log.info(f"    Time spent in SVD: {t1-t0:.2f}s")
-            
+            # SVD:
+            V = randomized_svd_uint8_input(data, K, N, M)
+
             # PCA:
             X_pca = np.zeros((N, K), dtype=np.float32)
             for i in range(0, N, 1024):
                 end_idx = min(i + 1024, N)
-                batch = data[:, i:end_idx].T.astype(np.float32)/2
+                batch = data[i:end_idx, :].astype(np.float32)/2
                 X_pca[i:end_idx] = batch@V.T
             
             # GMM:
@@ -113,7 +105,7 @@ class RandomInitialization(object):
             P_init = torch.as_tensor(P, dtype=torch.float32, device=device).contiguous()
             V = torch.as_tensor(V.T, dtype=torch.float32, device=device).contiguous()
 
-        data = torch.as_tensor(data.T, dtype=torch.uint8, device='cpu')
+        data = torch.as_tensor(data, dtype=torch.uint8, device='cpu')
         packed_data = torch.empty((N, (M + 3) // 4), dtype=torch.uint8, device=device)
         
         source_path = os.path.abspath("neural-admixture-dev/neural_admixture/src/utils_c/pack2bit.cu")
@@ -125,3 +117,49 @@ class RandomInitialization(object):
         P, Q, _ = model.launch_training(P_init, packed_data, hidden_size, V.shape[1], K, activation, V, M, N)
         
         return P, Q
+    
+# -----------------------------------------------------------------------------
+# High-level randomized SVD function
+# -----------------------------------------------------------------------------
+
+def randomized_svd_uint8_input(A_uint8, k, N, M, oversampling=10, power_iterations=4):
+    """
+    Randomized SVD para matrices uint8 de forma (n_features, m_samples).
+    Retorna Vt_k de forma (k, m_samples).
+    """
+    k_prime = min(N, M, k + oversampling)
+
+    total_start_time = time.time()
+    log.info("1) Generando Ω y Y = A @ Ω...")
+    Omega = np.random.randn(M, k_prime).astype(np.float32)
+    Y = rsvd.multiply_A_omega(A_uint8, Omega)
+    log.info(f"   Y.shape={Y.shape}, time={time.time() - total_start_time:.4f}s")
+
+    if power_iterations > 0:
+        iter_start = time.time()
+        for _ in range(power_iterations):
+            Q_y, _ = np.linalg.qr(Y, mode='reduced')    # (n, k_prime)
+            Q_y = np.ascontiguousarray(Q_y.T)
+            B_tmp = rsvd.multiply_QT_A(Q_y, A_uint8)      # (k_prime, m)
+            B_tmp = np.ascontiguousarray(B_tmp.T)
+            Y = rsvd.multiply_A_omega(A_uint8, B_tmp)     # (n, k_prime)
+        log.info(f"   Power iterations time={time.time() - iter_start:.4f}s")
+
+    log.info("2) QR de Y...")
+    qr_start = time.time()
+    Q, _ = np.linalg.qr(Y, mode='reduced')            # (n, k_prime)
+    log.info(f"   Q.shape={Q.shape}, time={time.time() - qr_start:.4f}s")
+
+    log.info("3) B = Qᵀ @ A...")
+    b_start = time.time()
+    Q = np.ascontiguousarray(Q.T)
+    B = rsvd.multiply_QT_A(Q, A_uint8)                   # (k_prime, m)
+    log.info(f"   B.shape={B.shape}, time={time.time() - b_start:.4f}s")
+
+    log.info("4) SVD de B...")
+    svd_start = time.time()
+    _, _, Vt = np.linalg.svd(B, full_matrices=False)
+    log.info(f"   SVD time={time.time() - svd_start:.4f}s")
+
+    log.info(f"Total time SVD: {time.time() - total_start_time:.4f}s")
+    return Vt[:k, :]
