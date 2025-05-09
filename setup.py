@@ -1,6 +1,10 @@
 from setuptools import setup, Extension
 from Cython.Build import cythonize
 import numpy
+import os
+
+os.environ["CC"] = "gcc"
+os.environ["CXX"] = "g++"
 
 # Define extensions
 cython_ext = Extension(

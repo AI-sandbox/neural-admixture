@@ -19,6 +19,9 @@ from .em_adam import optimize_parameters
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 logging.getLogger("distributed").setLevel(logging.WARNING)
 
+os.environ["CC"] = "gcc"
+os.environ["CXX"] = "g++"
+
 log = logging.getLogger(__name__)
 
 class RandomInitialization(object):
@@ -64,7 +67,7 @@ class RandomInitialization(object):
             with dask.config.set({"random.seed": seed}):
                 data_dask = da.from_array(data.T, chunks=(N, 100_000), asarray=False)
                 if np.any(data == 9):
-                    data_dask = da.where(data_dask == 9, 0, data_dask)
+                    data_dask = da.where(data_dask == 3, 0, data_dask)
                 data_dask = data_dask.persist()
                 _, _, V = da.linalg.svd_compressed(data_dask, k=K, seed=da.random.RandomState(RandomState=np.random.RandomState), compute=True) 
             V = V.compute()
@@ -113,7 +116,7 @@ class RandomInitialization(object):
         data = torch.as_tensor(data.T, dtype=torch.uint8, device='cpu')
         packed_data = torch.empty((N, (M + 3) // 4), dtype=torch.uint8, device=device)
         
-        source_path = os.path.abspath("neural_admixture/src/utils_c/pack2bit.cu")
+        source_path = os.path.abspath("neural-admixture-dev/neural_admixture/src/utils_c/pack2bit.cu")
         pack2bit = load(name="pack2bit", sources=[source_path], verbose=True)
         pack2bit.pack2bit_cpu_to_gpu(data, packed_data)
         

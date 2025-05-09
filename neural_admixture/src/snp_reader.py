@@ -3,8 +3,8 @@ import logging
 import numpy as np
 import sys
 
+from .utils_c import utils
 from math import ceil
-
 from pathlib import Path
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
@@ -14,24 +14,38 @@ class SNPReader:
     """Wrapper to read genotype data from several formats
     """
 
-    def _read_bed(self, file: str, master: bool):
-        file_path = Path(file)
-        fam_file = file_path.with_suffix('.fam')
-        bed_file = file_path.with_suffix('.bed')
-        
-        with open(fam_file, "r") as f:
-            N = sum(1 for _ in f)
-        N_bytes = ceil(N/4)
-        B = np.fromfile(bed_file, dtype=np.uint8, offset=3)
-        M = B.size // N_bytes
-        B.shape = (M, N_bytes)
+    def _read_bed(self, file: str, master: bool) -> np.ndarray:
+        """Reader wrapper for BED files
 
-        # desempacar 2 bits → 4 genotipos
-        shifts = np.array([0,2,4,6], dtype=np.uint8)
-        codes = (B[..., None] >> shifts) & 3
-        lookup = np.array([2,3,1,0], dtype=np.uint8)
-        G = lookup[codes].reshape(M, N_bytes*4)[:,:N]
-        has_missing = bool(np.any(G==3))
+        Args:
+            file (str): path to file.
+            master (bool): Wheter or not this process is the master for printing the output.
+
+        Returns:
+            da.core.Array: averaged genotype Dask array of shape (n_samples, n_snps)
+        """
+        if master:
+            log.info("    Input format is BED.")
+
+        file_path = Path(file)
+        fam_file = file_path.with_suffix(".fam")
+        bed_file = file_path.with_suffix(".bed")
+        
+        with open(fam_file, "r") as fam:
+            N = sum(1 for _ in fam)
+        N_bytes = ceil(N / 4)
+        
+        with open(bed_file, "rb") as bed:
+            B = np.fromfile(bed, dtype=np.uint8, offset=3)
+        
+        assert (B.shape[0] % N_bytes) == 0, "bim file doesn't match!"
+        M = B.shape[0] // N_bytes
+        B.shape = (M, N_bytes)
+        
+        G = np.zeros((M, N), dtype=np.uint8)
+        utils.read_bed(B, G)
+        del B
+        has_missing = bool(np.any(G == 3))
         return G, has_missing
     
     def read_data(self, file: str, master: bool) -> np.ndarray:
