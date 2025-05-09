@@ -42,8 +42,9 @@ class SNPReader:
         M = B.shape[0] // N_bytes
         B.shape = (M, N_bytes)
         
-        G = np.zeros((M, N), dtype=np.uint8)
+        G = np.zeros((N, M), dtype=np.uint8)
         utils.read_bed(B, G)
+
         del B
         has_missing = bool(np.any(G == 3))
         return G, has_missing

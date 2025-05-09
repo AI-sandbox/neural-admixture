@@ -59,9 +59,9 @@ class RandomInitialization(object):
         if master:
             log.info("    Running Random initialization...")
 
-        M, N = data.shape
+        N, M = data.shape
 
-        data = np.ascontiguousarray(data.T)
+        #data = np.ascontiguousarray(data.T)
     
         if master:
             # SVD:

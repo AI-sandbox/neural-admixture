@@ -78,7 +78,7 @@ def read_data(tr_file: str, master: bool) -> np.ndarray:
     snp_reader = SNPReader()
     data, has_missing = snp_reader.read_data(tr_file, master)
     if master:
-        log.info(f"    Data contains {data.shape[1]} samples and {data.shape[0]} SNPs.")
+        log.info(f"    Data contains {data.shape[0]} samples and {data.shape[1]} SNPs.")
    
     return data, has_missing
 
