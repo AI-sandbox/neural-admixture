@@ -110,14 +110,19 @@ class RandomInitialization(object):
             P_init = torch.as_tensor(P, dtype=torch.float32, device=device).contiguous()
             V = torch.as_tensor(V.T, dtype=torch.float32, device=device).contiguous()
 
-        packed_data = torch.empty((N, (M + 3) // 4), dtype=torch.uint8, device=device)
-        source_path = os.path.abspath("neural-admixture-dev/neural_admixture/src/utils_c/pack2bit.cu")
-        pack2bit = load(name="pack2bit", sources=[source_path], verbose=True)
-        pack2bit.pack2bit_cpu_to_gpu(data, packed_data)
+        if num_gpus>0:
+            packed_data = torch.empty((N, (M + 3) // 4), dtype=torch.uint8, device=device)
+            source_path = os.path.abspath("neural-admixture-dev/neural_admixture/src/utils_c/pack2bit.cu")
+            pack2bit = load(name="pack2bit", sources=[source_path], verbose=True)
+            pack2bit.pack2bit_cpu_to_gpu(data, packed_data)
+            del data
+            data = packed_data
+        else:
+            pack2bit=None
         
         model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device, master, num_cpus, pack2bit)
         
-        P, Q, _ = model.launch_training(P_init, packed_data, hidden_size, V.shape[1], K, activation, V, M, N)
+        P, Q, _ = model.launch_training(P_init, data, hidden_size, V.shape[1], K, activation, V, M, N)
         
         return P, Q
     
