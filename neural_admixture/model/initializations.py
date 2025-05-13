@@ -65,6 +65,7 @@ class RandomInitialization(object):
     
         if master:
             # SVD:
+            data = data.numpy()
             V = randomized_svd_uint8_input(data, K, N, M)
 
             # PCA:
@@ -84,7 +85,9 @@ class RandomInitialization(object):
             
             P = np.ascontiguousarray(np.clip((gmm.means_@V).T, 5e-6, 1 - 5e-6), dtype=np.float32)
             del gmm
-        
+            
+            data = torch.as_tensor(data, dtype=torch.uint8, device='cpu')
+
         if torch.distributed.is_initialized():    
             dist.barrier()
         if num_gpus>1:
@@ -95,19 +98,19 @@ class RandomInitialization(object):
                 P_init = torch.empty((M, K), dtype=torch.float32, device=device)
                 V = torch.empty((M, K), dtype=torch.float32, device=device)
             
-            log.info("    Broadcasting to all GPUs...")
+            if master:
+                log.info("    Broadcasting to all GPUs...")
             dist.broadcast(P_init, src=0)
             dist.broadcast(V, src=0)
             dist.barrier()
-            log.info("    Finished broadcasting!")
+            if master:
+                log.info("    Finished broadcasting!")
 
         else:
             P_init = torch.as_tensor(P, dtype=torch.float32, device=device).contiguous()
             V = torch.as_tensor(V.T, dtype=torch.float32, device=device).contiguous()
 
-        data = torch.as_tensor(data, dtype=torch.uint8, device='cpu')
         packed_data = torch.empty((N, (M + 3) // 4), dtype=torch.uint8, device=device)
-        
         source_path = os.path.abspath("neural-admixture-dev/neural_admixture/src/utils_c/pack2bit.cu")
         pack2bit = load(name="pack2bit", sources=[source_path], verbose=True)
         pack2bit.pack2bit_cpu_to_gpu(data, packed_data)

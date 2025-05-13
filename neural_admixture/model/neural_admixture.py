@@ -303,7 +303,7 @@ class NeuralAdmixture():
             
             loss_acc += loss.item()
         
-        if epoch%2==0:
+        if epoch%5==0:
             log.info(f"            Loss in epoch {epoch:3d} on device {self.device} is {loss_acc:,.0f}")
         
     def _run_step(self, x_step: torch.Tensor) -> torch.Tensor:
@@ -464,10 +464,11 @@ class NeuralAdmixture():
                 unpacked_step = torch.empty((data_batch.shape[0], M), dtype=torch.uint8, device=device)
                 pack2bit.unpack2bit_gpu_to_gpu(data_batch, unpacked_step)
                 
+                mask = (unpacked_step != 3).float()
                 unpacked_step = torch.clamp(unpacked_step, eps, 2 - eps)
                 rec_batch = torch.clamp(torch.matmul(Q_batch, P), eps, 1 - eps)
 
-                loglikelihood_batch = unpacked_step * torch.log(rec_batch) + (2 - unpacked_step) * torch.log1p(-rec_batch)
+                loglikelihood_batch = (unpacked_step * torch.log(rec_batch) + (2 - unpacked_step) * torch.log1p(-rec_batch)) * mask
 
                 total_loglikelihood += torch.sum(loglikelihood_batch)
 

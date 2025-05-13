@@ -62,7 +62,7 @@ def parse_infer_args(argv: List[str]):
 
     return parser.parse_args(argv)
 
-def read_data(tr_file: str, master: bool) -> np.ndarray:
+def read_data(tr_file: str) -> np.ndarray:
     """
     Reads SNP data from a file and applies imputation if specified..
 
@@ -76,11 +76,10 @@ def read_data(tr_file: str, master: bool) -> np.ndarray:
         da.core.Array: A Dask array containing the SNP data.
     """
     snp_reader = SNPReader()
-    data, has_missing = snp_reader.read_data(tr_file, master)
-    if master:
-        log.info(f"    Data contains {data.shape[0]} samples and {data.shape[1]} SNPs.")
+    data = snp_reader.read_data(tr_file)
+    log.info(f"    Data contains {data.shape[0]} samples and {data.shape[1]} SNPs.")
    
-    return data, has_missing
+    return data
 
 def train(initialization: str, device: torch.device, k: int, seed: int, n_components: int, epochs: int, batch_size: int, learning_rate: float, 
         data: np.ndarray, num_gpus: int, activation_str: str, hidden_size: int, master: bool, num_cpus: int,
@@ -148,23 +147,20 @@ def find_free_port(start_port=12355):
                 return port
             port += 1
 
-def ddp_setup(stage: str, rank: int, num_gpus: int) -> None:
-    """
-    Initialize or destroy the Distributed Data Parallel (DDP) process group.
-
-    Args:
-        stage (str): The stage of setup. 'begin' initializes the process group, 
-                     while any other value destroys it. Defaults to 'begin'.
-
-    Returns:
-        None
-    """
-    if num_gpus>1:
+def ddp_setup(stage: str, rank: int, world_size: int) -> None:
+    if world_size > 1:
         if stage == 'begin':
-            os.environ["MASTER_ADDR"] = "localhost"
-            os.environ["MASTER_PORT"] = str(find_free_port(12355))
-            torch.cuda.set_device(rank)
-            torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=num_gpus, device_id=torch.device(f'cuda:{int(rank)}'))
+            os.environ["MASTER_ADDR"] = os.environ.get("MASTER_ADDR", "127.0.0.1")
+            os.environ["MASTER_PORT"] = os.environ.get("MASTER_PORT", "29500")
+
+            torch.cuda.set_device(rank % torch.cuda.device_count())
+
+            torch.distributed.init_process_group(
+                backend="nccl",
+                init_method="env://",
+                rank=rank,
+                world_size=world_size
+            )
         else:
             torch.distributed.destroy_process_group()
     

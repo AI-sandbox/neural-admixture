@@ -14,7 +14,7 @@ class SNPReader:
     """Wrapper to read genotype data from several formats
     """
 
-    def _read_bed(self, file: str, master: bool) -> np.ndarray:
+    def _read_bed(self, file: str) -> np.ndarray:
         """Reader wrapper for BED files
 
         Args:
@@ -24,8 +24,7 @@ class SNPReader:
         Returns:
             da.core.Array: averaged genotype Dask array of shape (n_samples, n_snps)
         """
-        if master:
-            log.info("    Input format is BED.")
+        log.info("    Input format is BED.")
 
         file_path = Path(file)
         fam_file = file_path.with_suffix(".fam")
@@ -44,12 +43,10 @@ class SNPReader:
         
         G = np.zeros((N, M), dtype=np.uint8)
         utils.read_bed(B, G)
-
         del B
-        has_missing = bool(np.any(G == 3))
-        return G, has_missing
+        return G
     
-    def read_data(self, file: str, master: bool) -> np.ndarray:
+    def read_data(self, file: str) -> np.ndarray:
         """Wrapper of readers
 
         Args:
@@ -63,9 +60,8 @@ class SNPReader:
         file_extensions = Path(file).suffixes
 
         if '.bed' in file_extensions:
-            G, has_missing = self._read_bed(file, master)
+            G = self._read_bed(file)
         else:
-            if master:
-                log.error("    Invalid format. Unrecognized file format. Make sure file ends with .bed")
+            log.error("    Invalid format. Unrecognized file format. Make sure file ends with .bed")
             sys.exit(1)
-        return (G if G.mean() < 1 else 2 - G), has_missing
+        return G if G.mean() < 1 else 2 - G
