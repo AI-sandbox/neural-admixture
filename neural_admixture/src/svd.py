@@ -52,6 +52,8 @@ def randomized_svd_uint8_input(A_uint8, k, N, M, oversampling=10, power_iteratio
     svd_start = time.time()
     _, _, Vt = np.linalg.svd(B, full_matrices=False)
     log.info(f"       SVD time={time.time() - svd_start:.4f}s")
-
+    
+    log.info("")
     log.info(f"    Total time SVD: {time.time() - total_start_time:.4f}s")
+    log.info("")
     return Vt[:k, :]

@@ -109,11 +109,11 @@ def train(initialization: str, device: torch.device, k: int, seed: int, n_compon
     """
     switchers = Switchers.get_switchers()
     activation = switchers['activations'][activation_str](0)
-    P, Q = switchers['initializations'][initialization](
+    P, Q, model = switchers['initializations'][initialization](
         epochs, batch_size, learning_rate, k, seed, n_components, data, device, 
         num_gpus, hidden_size, activation, master, V, num_cpus, has_missing)
     
-    return P, Q
+    return P, Q, model
 
 def write_outputs(Q: np.ndarray, run_name: str, K: int, out_path: str, P: np.ndarray=None) -> None:
     """

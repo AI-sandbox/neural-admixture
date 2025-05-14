@@ -119,6 +119,6 @@ class RandomInitialization(object):
         
         model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device, master, num_cpus, pack2bit)
         
-        P, Q, _ = model.launch_training(P_init, data, hidden_size, V.shape[1], K, activation, V, M, N)
+        P, Q, model = model.launch_training(P_init, data, hidden_size, V.shape[1], K, activation, V, M, N)
         
-        return P, Q
+        return P, Q, model
