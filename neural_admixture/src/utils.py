@@ -79,10 +79,10 @@ def read_data(tr_file: str) -> np.ndarray:
     data = snp_reader.read_data(tr_file)
     log.info(f"    Data contains {data.shape[0]} samples and {data.shape[1]} SNPs.")
    
-    return data
+    return data, data.shape[0], data.shape[1]
 
 def train(initialization: str, device: torch.device, k: int, seed: int, n_components: int, epochs: int, batch_size: int, learning_rate: float, 
-        data: np.ndarray, num_gpus: int, activation_str: str, hidden_size: int, master: bool, num_cpus: int,
+        data: np.ndarray, num_gpus: int, activation_str: str, hidden_size: int, master: bool, V, num_cpus: int,
         has_missing: bool) -> Tuple[np.ndarray, np.ndarray, torch.nn.Module]:
     """
     Train the model using specified initialization, hyperparameters, and data.
@@ -111,7 +111,7 @@ def train(initialization: str, device: torch.device, k: int, seed: int, n_compon
     activation = switchers['activations'][activation_str](0)
     P, Q = switchers['initializations'][initialization](
         epochs, batch_size, learning_rate, k, seed, n_components, data, device, 
-        num_gpus, hidden_size, activation, master, num_cpus, has_missing)
+        num_gpus, hidden_size, activation, master, V, num_cpus, has_missing)
     
     return P, Q
 

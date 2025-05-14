@@ -14,7 +14,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
 def fit_model(args: argparse.Namespace, trX: torch.Tensor, device: torch.device, num_gpus: int,
-            master: bool, has_missing: bool=False) -> None:
+            master: bool, V, has_missing: bool=False) -> None:
     """Wrapper function to start training
     """
     (epochs, batch_size, learning_rate, save_dir, activation_str, hidden_size, initialization, 
@@ -26,7 +26,7 @@ def fit_model(args: argparse.Namespace, trX: torch.Tensor, device: torch.device,
     
     K = int(args.k)
     P, Q = utils.train(initialization, device, K, seed, n_components, epochs, batch_size, learning_rate, trX, num_gpus, 
-                            activation_str, hidden_size, master, num_cpus, has_missing)
+                            activation_str, hidden_size, master, V, num_cpus, has_missing)
     if master:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
         utils.write_outputs(Q, name, K, save_dir, P)
@@ -67,7 +67,7 @@ def perform_cross_validation(args: argparse.Namespace, trX: da.core.Array, devic
     utils.save_cv_error_plot(cv_errs_reduced, args.save_dir)
 """
 
-def main(rank: int, argv: List[str], num_gpus, data):
+def main(rank: int, argv: List[str], num_gpus, data, V):
     """Training entry point
     """
     utils.ddp_setup('begin', rank, num_gpus)
@@ -102,7 +102,7 @@ def main(rank: int, argv: List[str], num_gpus, data):
         #if args.cv is not None:
         #    perform_cross_validation(args, trX, device, num_gpus, master)   
         
-        fit_model(args, data, device, num_gpus, master)
+        fit_model(args, data, device, num_gpus, master, V)
         
         if master:
             t1 = time.time()

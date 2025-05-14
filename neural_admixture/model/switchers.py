@@ -12,10 +12,10 @@ class Switchers(object):
 
     _initializations = {
         'random': lambda epochs, batch_size, learning_rate, K, seed, n_components, data, device, 
-                    num_gpus, hidden_size, activation, master, num_cpus, has_missing: 
+                    num_gpus, hidden_size, activation, master, V, num_cpus, has_missing: 
             
             init.RandomInitialization.get_decoder_init(epochs, batch_size, learning_rate, K, seed, n_components, data, device, 
-                                                num_gpus, hidden_size, activation, master, num_cpus, has_missing),
+                                                num_gpus, hidden_size, activation, master, V, num_cpus, has_missing),
         }
 
     @classmethod

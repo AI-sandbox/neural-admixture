@@ -8,7 +8,6 @@ from typing import Callable, Optional, Tuple
 from tqdm.auto import tqdm
 
 from ..src.loaders import dataloader_admixture
-#from ..src.utils_c import pack2bit
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)

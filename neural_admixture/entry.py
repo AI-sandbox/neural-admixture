@@ -7,6 +7,7 @@ import torch.multiprocessing as mp
 from ._version import __version__
 
 from .src import utils
+from .src.svd import randomized_svd_uint8_input
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
@@ -83,15 +84,22 @@ def main():
     # BEGIN TRAIN OF INFERENCE:
     if sys.argv[1]=='train':
         from .src import train
+        
         data_path = arg_list[arg_list.index('--data_path') + 1]
-        data = utils.read_data(data_path)
+        K = int(arg_list[arg_list.index('--k') + 1])
+        data, N, M = utils.read_data(data_path)
+        log.info("")
+        log.info("    Running SVD...")
+        log.info("")
+        V = randomized_svd_uint8_input(data, K, N, M)
         data = torch.as_tensor(data, dtype=torch.uint8).share_memory_()
+        
         if num_gpus>1:
             log.info("    Entering multi-GPU training...")
-            mp.spawn(train.main, args=(arg_list[2:], num_gpus, data), nprocs=num_gpus)
+            mp.spawn(train.main, args=(arg_list[2:], num_gpus, data, V), nprocs=num_gpus)
         else:
             log.info("    Entering single-GPU or CPU training...")
-            sys.exit(train.main(0, arg_list[2:], num_gpus, data))
+            sys.exit(train.main(0, arg_list[2:], num_gpus, data, V))
     
     elif sys.argv[1]=='infer':
         from .src import inference
