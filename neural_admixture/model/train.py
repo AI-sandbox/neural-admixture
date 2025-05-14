@@ -9,6 +9,7 @@ from torch.utils.cpp_extension import load
 from sklearn.mixture import GaussianMixture as GaussianMixture
 from typing import Tuple
 from .neural_admixture import NeuralAdmixture
+from ..src.utils_c import utils
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 logging.getLogger("distributed").setLevel(logging.WARNING)
@@ -96,13 +97,18 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
             source_path = os.path.abspath("neural-admixture-dev/neural_admixture/src/utils_c/pack2bit.cu")
             pack2bit = load(name="pack2bit", sources=[source_path], verbose=True)
             pack2bit.pack2bit_cpu_to_gpu(data, packed_data)
-            del data
-            data = packed_data
         else:
             pack2bit=None
-        
+            packed_data = data
         model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, master, pack2bit)
         
-        P, Q, model = model.launch_training(P_init, data, hidden_size, V.shape[1], K, V, M, N)
+        P, Q, model = model.launch_training(P_init, packed_data, hidden_size, V.shape[1], K, V, M, N)
         
+        if master:
+            data = data.numpy()
+            P = P.astype(np.float64)
+            Q = Q.astype(np.float64)
+            
+            logl = utils.loglikelihood(data, P, Q, K)
+            log.info(f"    Log-likelihood {logl:3f}.")
         return P, Q, model

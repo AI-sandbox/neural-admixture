@@ -422,8 +422,6 @@ class NeuralAdmixture():
         Details:
             - Computes and logs the log-likelihood of the model given the data.
         """
-        self._loglikelihood(Q, self.raw_model.P.data.detach().T, data, self.master, self.M, self.device, self.pack2bit, self.num_gpus)
-        
         return self.raw_model.P.data.detach().cpu().numpy(), Q.cpu().numpy(), self.raw_model
     
     @staticmethod
@@ -448,58 +446,3 @@ class NeuralAdmixture():
         except Exception as e:
             log.info(f"            Error computing Hudson's Fst: {e}")
             return float('nan')
-        
-    @staticmethod
-    def _loglikelihood(Q: torch.Tensor, P: torch.Tensor, data: torch.Tensor, master: bool, M: int, device: torch.device, 
-                    pack2bit, num_gpus: int, eps: float = 1e-7) -> None:
-        """
-        Compute the deviance (log-likelihood loss) for a single K using PyTorch tensors, 
-        processed in batches of 2048 samples to manage memory usage.
-
-        Args:
-            Q (torch.Tensor): Admixture proportion matrix (shape N x K), where N is the number of samples 
-                            and K is the number of components.
-            P (torch.Tensor): Allele frequency matrix (shape K x M), where M is the number of SNPs.
-            data (torch.Tensor): Original genotype data matrix (shape N x M).
-            master (bool): Flag indicating if this is the master process (controls logging/output).
-            M (int): Number of SNPs (columns/features in data).
-            device (torch.device): Device on which computation is performed ('cuda' or 'cpu').
-            pack2bit: Utility or function to decode packed 2-bit encoded genotype data.
-            num_gpus (int): Number of GPUs available (used for distributed evaluation logic).
-            eps (float, optional): Small constant to avoid numerical instability in log computations. Defaults to 1e-7.
-
-        Returns:
-            None
-        """
-        if master:
-            batch_size = 2048
-            total_loglikelihood = torch.tensor(0.0, device=Q.device)
-            num_samples = Q.size(0)
-            num_batches = (num_samples + batch_size - 1) // batch_size
-
-            for i in range(num_batches):
-                start_idx = i * batch_size
-                end_idx = min((i + 1) * batch_size, num_samples)
-                Q_batch = Q[start_idx:end_idx, :]
-                
-                data_batch = data[start_idx:end_idx, :]
-                if num_gpus>0:
-                    unpacked_step = torch.empty((data_batch.shape[0], M), dtype=torch.uint8, device=device)
-                    pack2bit.unpack2bit_gpu_to_gpu(data_batch, unpacked_step)
-                    mask = (unpacked_step != 3).float()
-                    unpacked_step = torch.clamp(unpacked_step, eps, 2 - eps)
-                    rec_batch = torch.clamp(torch.matmul(Q_batch, P), eps, 1 - eps)
-                    loglikelihood_batch = (unpacked_step * torch.log(rec_batch) + (2 - unpacked_step) * torch.log1p(-rec_batch)) * mask
-                else:
-                    mask = (data_batch != 3).float()
-                    data_batch = torch.clamp(data_batch, eps, 2 - eps)
-                    rec_batch = torch.clamp(torch.matmul(Q_batch, P), eps, 1 - eps)
-                    loglikelihood_batch = (data_batch * torch.log(rec_batch) + (2 - data_batch) * torch.log1p(-rec_batch)) * mask
-                    
-                total_loglikelihood += torch.sum(loglikelihood_batch)
-
-            result = total_loglikelihood
-            log.info(f"    Total Log likelihood: {result.item():,.0f}")
-            log.info("\n")
-
-            return
