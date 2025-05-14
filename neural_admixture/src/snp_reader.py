@@ -1,4 +1,3 @@
-import dask.array as da
 import logging
 import numpy as np
 import sys
@@ -19,10 +18,9 @@ class SNPReader:
 
         Args:
             file (str): path to file.
-            master (bool): Wheter or not this process is the master for printing the output.
 
         Returns:
-            da.core.Array: averaged genotype Dask array of shape (n_samples, n_snps)
+            np.ndarray: averaged genotype Dask array of shape (n_samples, n_snps)
         """
         log.info("    Input format is BED.")
 
@@ -51,11 +49,9 @@ class SNPReader:
 
         Args:
             file (str): path to file
-            imputation (str): imputation method. Should be either 'zero' or 'mean'
-            master (bool): Wheter or not this process is the master for printing the output.
-            
+
         Returns:
-            da.core.Array: averaged genotype Dask array of shape (n_samples, n_snps)
+            np.ndarray: averaged genotype numpy array of shape (n_samples, n_snps)
         """
         file_extensions = Path(file).suffixes
 

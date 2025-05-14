@@ -83,7 +83,7 @@ def main():
     
     # BEGIN TRAIN OF INFERENCE:
     if sys.argv[1]=='train':
-        from .src import train
+        from .src import main
         
         data_path = arg_list[arg_list.index('--data_path') + 1]
         K = int(arg_list[arg_list.index('--k') + 1])
@@ -96,10 +96,10 @@ def main():
         
         if num_gpus>1:
             log.info("    Entering multi-GPU training...")
-            mp.spawn(train.main, args=(arg_list[2:], num_gpus, data, V), nprocs=num_gpus)
+            mp.spawn(main.main, args=(arg_list[2:], num_gpus, data, V), nprocs=num_gpus)
         else:
             log.info("    Entering single-GPU or CPU training...")
-            sys.exit(train.main(0, arg_list[2:], num_gpus, data, V))
+            sys.exit(main.main(0, arg_list[2:], num_gpus, data, V))
     
     elif sys.argv[1]=='infer':
         from .src import inference

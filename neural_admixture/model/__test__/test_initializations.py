@@ -4,7 +4,7 @@ import pytest
 import random
 import string
 
-from neural_admixture.model.initializations import PCArchetypal, PCKMeansInitialization, SupervisedInitialization
+from neural_admixture.model.train import PCArchetypal, PCKMeansInitialization, SupervisedInitialization
 
 
 @pytest.mark.parametrize(["n", "d", "K"], [[42, 1000, [2,3,4]], [500, 100, [99,100,101]], [30,100,[2,3,4]]])

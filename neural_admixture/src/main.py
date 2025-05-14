@@ -3,30 +3,31 @@ import logging
 import sys
 import time
 import torch
+import numpy as np
+
 from pathlib import Path
 from typing import List
 from argparse import ArgumentError, ArgumentTypeError
 from pathlib import Path
 
 from . import utils
+from ..model.train import train
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
-def fit_model(args: argparse.Namespace, trX: torch.Tensor, device: torch.device, num_gpus: int,
-            master: bool, V, has_missing: bool=False) -> None:
-    """Wrapper function to start training
+def fit_model(args: argparse.Namespace, data: torch.Tensor, device: torch.device, num_gpus: int,
+            master: bool, V: np.ndarray) -> None:
     """
-    (epochs, batch_size, learning_rate, save_dir, activation_str, hidden_size, initialization, 
-    n_components, name, seed, num_cpus) = (int(args.epochs), int(args.batch_size), float(args.learning_rate), args.save_dir, 
-                                args.activation, int(args.hidden_size), args.initialization, 
-                                int(args.n_components), args.name, int(args.seed), int(args.num_cpus))
+    Wrapper function to start training
+    """
+    (epochs, batch_size, learning_rate, save_dir, hidden_size, name, seed) = (int(args.epochs), int(args.batch_size), float(args.learning_rate), args.save_dir, 
+                                                                            int(args.hidden_size), args.name, int(args.seed))
         
     utils.set_seed(seed)
     
     K = int(args.k)
-    P, Q, model = utils.train(initialization, device, K, seed, n_components, epochs, batch_size, learning_rate, trX, num_gpus, 
-                            activation_str, hidden_size, master, V, num_cpus, has_missing)
+    P, Q, model = train(epochs, batch_size, learning_rate, K, seed, data, device, num_gpus, hidden_size, master, V)
     if master:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
         save_path = f'{save_dir}/{name}.pt'
@@ -71,8 +72,9 @@ def perform_cross_validation(args: argparse.Namespace, trX: da.core.Array, devic
     utils.save_cv_error_plot(cv_errs_reduced, args.save_dir)
 """
 
-def main(rank: int, argv: List[str], num_gpus, data, V):
-    """Training entry point
+def main(rank: int, argv: List[str], num_gpus: int, data: torch.Tensor, V: np.ndarray):
+    """
+    Training entry point
     """
     utils.ddp_setup('begin', rank, num_gpus)
     master = rank == 0

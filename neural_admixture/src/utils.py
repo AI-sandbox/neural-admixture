@@ -3,15 +3,13 @@ import logging
 import random
 import os
 import sys
-import socket
 import numpy as np
 import torch
 
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 from .snp_reader import SNPReader
-from ..model.switchers import Switchers
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
@@ -27,14 +25,9 @@ def parse_train_args(argv: List[str]):
     parser.add_argument('--batch_size', required=False, default=800, type=int, help='Batch size.')
     parser.add_argument('--learning_rate', required=False, default=25e-4, type=float, help='Learning rate.')
 
-    parser.add_argument('--initialization', required=False, type=str, default = 'random',
-                        choices=['random'], help='P initialization.')
-    
-    parser.add_argument('--activation', required=False, default='relu', type=str, choices=['relu', 'tanh', 'gelu'], help='Activation function for encoder layers.')
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
     parser.add_argument('--k', required=True, type=int, help='Number of populations/clusters.')
     parser.add_argument('--hidden_size', required=False, default=1024, type=int, help='Dimension of first projection in encoder.')
-    parser.add_argument('--n_components', required=False, type=int, default=8, help='Number of components to use for the random projection.')
     parser.add_argument('--save_dir', required=True, type=str, help='Save model in this directory')
     parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data')
     parser.add_argument('--name', required=True, type=str, help='Experiment/model name')
@@ -68,52 +61,15 @@ def read_data(tr_file: str) -> np.ndarray:
 
     Args:
         tr_file (str): Path to the SNP data file.
-        imputation (str): Type of imputation to apply ('mean' or 'zero').
-        master (bool): Wheter or not this process is the master for printing the output.
-        tr_pops_f (str, optional): denotes the path containing the main populations file. Defaults to None.
 
     Returns:
-        da.core.Array: A Dask array containing the SNP data.
+        np.ndarray: A numpy array containing the SNP data.
     """
     snp_reader = SNPReader()
     data = snp_reader.read_data(tr_file)
     log.info(f"    Data contains {data.shape[0]} samples and {data.shape[1]} SNPs.")
    
     return data, data.shape[0], data.shape[1]
-
-def train(initialization: str, device: torch.device, k: int, seed: int, n_components: int, epochs: int, batch_size: int, learning_rate: float, 
-        data: np.ndarray, num_gpus: int, activation_str: str, hidden_size: int, master: bool, V, num_cpus: int,
-        has_missing: bool) -> Tuple[np.ndarray, np.ndarray, torch.nn.Module]:
-    """
-    Train the model using specified initialization, hyperparameters, and data.
-
-    Args:
-        initialization (str): Initialization strategy to use.
-        device (torch.device): Device to perform training (CPU or GPU).
-        save_dir (str): Directory to save model initialization files.
-        name (str): Name identifier for the training run.
-        k (int): Number of clusters or components.
-        seed (int): Random seed for reproducibility.
-        n_components (int): Number of components to use in the model.
-        epochs (int): Number of epochs.
-        batch_size (int): Batch size.
-        learning_rate (float): Learning rate.
-        data (np.ndarray): Training data in numpy array format.
-        num_gpus (int): Number of GPUs to use.
-        activation_str (str): String key for selecting the activation function.
-        hidden_size (int): Size of hidden layers in the neural network.
-        master (bool): Wheter or not this process is the master for printing the output.
-
-    Returns:
-        Tuple[np.ndarray, np.ndarray, torch.nn.Module]: Trained P and Q matrices and the trained model.
-    """
-    switchers = Switchers.get_switchers()
-    activation = switchers['activations'][activation_str](0)
-    P, Q, model = switchers['initializations'][initialization](
-        epochs, batch_size, learning_rate, k, seed, n_components, data, device, 
-        num_gpus, hidden_size, activation, master, V, num_cpus, has_missing)
-    
-    return P, Q, model
 
 def write_outputs(Q: np.ndarray, run_name: str, K: int, out_path: str, P: np.ndarray=None) -> None:
     """
@@ -138,16 +94,18 @@ def write_outputs(Q: np.ndarray, run_name: str, K: int, out_path: str, P: np.nda
         log.info("    Q matrix saved.")
     return 
 
-def find_free_port(start_port=12355):
-    """ Find a free port starting from a given port number. """
-    port = start_port
-    while True:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(("localhost", port)) != 0:
-                return port
-            port += 1
-
 def ddp_setup(stage: str, rank: int, world_size: int) -> None:
+    """
+    Set up the distributed environment for training.
+
+    Args:
+        stage (str): Either 'begin' to initialize or 'end' to finalize the distributed process group.
+        rank (int): The rank (ID) of the current process.
+        world_size (int): The total number of processes participating in the training.
+
+    Returns:
+        None
+    """
     if world_size > 1:
         if stage == 'begin':
             os.environ["MASTER_ADDR"] = os.environ.get("MASTER_ADDR", "127.0.0.1")

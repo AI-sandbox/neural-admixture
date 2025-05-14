@@ -4,7 +4,7 @@ import json
 import torch
 
 from pathlib import Path
-from typing import Callable, Optional, Tuple
+from typing import Optional, Tuple
 from tqdm.auto import tqdm
 
 from ..src.loaders import dataloader_admixture
@@ -20,11 +20,10 @@ class Q_P(torch.nn.Module):
         hidden_size (int): The size of the hidden layer.
         num_features (int): The number of features in the input data.
         k (int): The number of output classes or components.
-        activation (torch.nn.Module): The activation function to use in the encoder.
         P (Optional[torch.Tensor], optional): The P matrix to be optimized. Defaults to None.
         
     """
-    def __init__(self, hidden_size: int, num_features: int, k: int, activation: torch.nn.Module, P: torch.Tensor=None, V: torch.Tensor=None, 
+    def __init__(self, hidden_size: int, num_features: int, k: int, P: torch.Tensor=None, V: torch.Tensor=None, 
                 is_train: bool=True) -> None:
         """
         Initialize the Q_P module with the given parameters.
@@ -45,7 +44,7 @@ class Q_P(torch.nn.Module):
         
         self.num_features = num_features
         self.batch_norm = torch.nn.RMSNorm(self.num_features, eps=1e-8)
-        self.encoder_activation = activation
+        self.encoder_activation = torch.nn.ReLU(inplace=True)
         self.hidden_size = hidden_size
         self.common_encoder = torch.nn.Sequential(
             torch.nn.Linear(self.num_features, self.hidden_size, bias=True),
@@ -150,7 +149,7 @@ class NeuralAdmixture():
             device_tensors (torch.device): Device for tensor data.
     """
     def __init__(self, k: int, epochs: int, batch_size: int, learning_rate: float, device: torch.device, seed: int, num_gpus: int,
-                device_tensors: torch.device, master: bool, num_cpus: int, pack2bit, supervised_loss_weight: Optional[float]=None):
+                master: bool, pack2bit, supervised_loss_weight: Optional[float]=None):
         """
         Initializes the NeuralAdmixture class with training parameters and settings.
 
@@ -170,7 +169,6 @@ class NeuralAdmixture():
         # Model configuration:
         self.k = k
         self.num_gpus = num_gpus
-        self.num_cpus = num_cpus
         self.device = device
         self.pin = True #True if 'gpu' in device_tensors.type else False
         self.master = master
@@ -193,7 +191,7 @@ class NeuralAdmixture():
         self.pack2bit = pack2bit
         
     def initialize_model(self, p_tensor: torch.Tensor, hidden_size: int, num_features: int, 
-                         k: int, activation: torch.nn.Module, V: torch.Tensor) -> None:
+                         k: int, V: torch.Tensor) -> None:
         """
         Initializes the Q_P model and sets up distributed training if applicable.
 
@@ -208,7 +206,7 @@ class NeuralAdmixture():
         Returns:
             None
         """
-        self.base_model = Q_P(hidden_size, num_features, k, activation, p_tensor, V).to(self.device)
+        self.base_model = Q_P(hidden_size, num_features, k, p_tensor, V).to(self.device)
         if self.device.type == 'cuda':
             self.model = torch.compile(self.base_model)
         if self.num_gpus > 1 and torch.distributed.is_initialized():
@@ -220,8 +218,7 @@ class NeuralAdmixture():
             self.raw_model = self.base_model
                 
     def launch_training(self, P: torch.Tensor, data: torch.Tensor, hidden_size:int, num_features:int, 
-                        k:int, activation: torch.nn.Module, V: torch.Tensor, M: int, N: int,
-                        y: Optional[torch.Tensor]=None) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+                        k:int, V: torch.Tensor, M: int, N: int, y: Optional[torch.Tensor]=None) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Launches the training process, which includes two distinct phases and the inference step to compute Q.
 
@@ -243,7 +240,7 @@ class NeuralAdmixture():
         self.N = N
         torch.set_float32_matmul_precision('medium')
         torch.set_flush_denormal(True)
-        self.initialize_model(P, hidden_size, num_features, k, activation, V)
+        self.initialize_model(P, hidden_size, num_features, k, V)
         if y is None:
             y = torch.zeros(data.size(0), device='cpu')
             run_epoch = self._run_epoch
@@ -256,7 +253,7 @@ class NeuralAdmixture():
             log.info("    Starting training...")
             log.info("")
         self.optimizer = self.raw_model.create_custom_adam(self.lr)
-        dataloader = dataloader_admixture(data, self.batch_size, self.num_gpus, self.seed, self.generator, self.pin, y, self.num_cpus, shuffle=True, num_workers=4)
+        dataloader = dataloader_admixture(data, self.batch_size, self.num_gpus, self.seed, self.generator, y, shuffle=True)
         for epoch in tqdm(range(self.epochs), desc="Epochs", file=sys.stderr):
             run_epoch(epoch, dataloader)
 
@@ -266,8 +263,7 @@ class NeuralAdmixture():
         self.model.eval()
         Q = torch.tensor([], device=self.device)
         with torch.inference_mode():
-            dataloader = dataloader_admixture(data, batch_size_inference_Q, 1 if self.num_gpus >= 1 else 0, self.seed, self.generator, self.pin, y,
-                                            self.num_cpus, shuffle=False, num_workers=4)
+            dataloader = dataloader_admixture(data, batch_size_inference_Q, 1 if self.num_gpus >= 1 else 0, self.seed, self.generator, y, shuffle=False)
             for x_step in dataloader:
                 if self.num_gpus>0:
                     unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)

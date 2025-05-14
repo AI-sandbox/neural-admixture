@@ -2,21 +2,13 @@ import logging
 import os
 import numpy as np
 import sys
-
 import torch
-import time
-import dask.array as da
-import dask
 import torch.distributed as dist
-from torch.utils.cpp_extension import load
 
+from torch.utils.cpp_extension import load
 from sklearn.mixture import GaussianMixture as GaussianMixture
 from typing import Tuple
-
 from .neural_admixture import NeuralAdmixture
-from .em_adam import optimize_parameters
-
-from ..src.utils_c import rsvd
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 logging.getLogger("distributed").setLevel(logging.WARNING)
@@ -26,14 +18,9 @@ os.environ["CXX"] = "g++"
 
 log = logging.getLogger(__name__)
 
-class RandomInitialization(object):
-    """
-    Class to initialize a neural admixture model using Gaussian Mixture Models (GMM).
-    """
-    @classmethod
-    def get_decoder_init(cls, epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
-                        n_components: int, data: np.ndarray, device: torch.device, num_gpus: int, hidden_size: int, 
-                        activation: torch.nn.Module, master: bool, V, num_cpus: int, has_missing: bool) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
+        data: torch.Tensor, device: torch.device, num_gpus: int, hidden_size: int, 
+        master: bool, V: np.ndarray) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Initializes P and Q matrices and trains a neural admixture model using GMM.
 
@@ -43,16 +30,13 @@ class RandomInitialization(object):
             learning_rate (float): Learning rate.
             K (int): Number of components (clusters).
             seed (int): Random seed for reproducibility.
-            init_path (Path): Path to store PCA initialization.
-            name (str): Name identifier for the model.
-            n_components (int): Number of PCA components.
-            data (np.ndarray): Input data array (samples x features).
+            data (torch.Tensor): Input data array (samples x features).
             device (torch.device): Device for computation (e.g., CPU or GPU).
             num_gpus (int): Number of GPUs available.
             hidden_size (int): Hidden layer size for the model.
-            activation (torch.nn.Module): Activation function.
             master (bool): Wheter or not this process is the master for printing the output.
-
+            V (np.ndarray): V matrix for PCA.
+            
         Returns:
             Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]: Initialized P matrix, Q matrix, and trained model.
         """
@@ -117,8 +101,8 @@ class RandomInitialization(object):
         else:
             pack2bit=None
         
-        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, device, master, num_cpus, pack2bit)
+        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, master, pack2bit)
         
-        P, Q, model = model.launch_training(P_init, data, hidden_size, V.shape[1], K, activation, V, M, N)
+        P, Q, model = model.launch_training(P_init, data, hidden_size, V.shape[1], K, V, M, N)
         
         return P, Q, model

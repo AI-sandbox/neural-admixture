@@ -6,8 +6,7 @@ from typing import Tuple
 
 # DATALOADER:
 def dataloader_admixture(X: torch.Tensor, batch_size: int, num_gpus: int, seed: int, 
-                generator: torch.Generator, pin: bool, y: torch.Tensor, num_cpus: int, 
-                shuffle: bool, num_workers: int):
+                generator: torch.Generator, y: torch.Tensor, shuffle: bool):
     """
     Creates a DataLoader with batch sampler or distributed sampler for the phase 2.
 
