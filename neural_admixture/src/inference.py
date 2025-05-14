@@ -8,11 +8,8 @@ import time
 from typing import List
 
 from . import utils
-from .ipca_gpu import GPUIncrementalPCA
-from .loaders import dataloader_inference
+from .loaders import dataloader_admixture
 from ..model.neural_admixture import Q_P
-from ..model.switchers import Switchers
-torch.serialization.add_safe_globals([GPUIncrementalPCA])
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
@@ -38,7 +35,6 @@ def main(argv: List[str]):
     out_name = args.out_name
     model_file_str = f'{args.save_dir}/{args.name}.pt'
     config_file_str = f'{args.save_dir}/{args.name}_config.json'
-    pca_file_str = f'{args.save_dir}/{args.name}_pca.pt'
     seed = int(args.seed)
     batch_size_inference_Q = int(args.batch_size)
     num_cpus = args.num_cpus
@@ -55,8 +51,6 @@ def main(argv: List[str]):
         raise e
     log.info("    Model config file loaded. Loading weights...")
     
-    switchers = Switchers.get_switchers()
-    activation = switchers['activations'][config['activation']](0)
     model = Q_P(int(config['hidden_size']), int(config['num_features']), int(config['k']), activation, is_train=False)
     model.load_state_dict(torch.load(model_file_str, weights_only=True, map_location=device))
     model.to(device)
@@ -64,31 +58,16 @@ def main(argv: List[str]):
     log.info("")
     
     # LOAD DATA:
-    
     t0 = time.time()
-    
     trX, _ = utils.read_data(data_file_str, master=True)
     data, _ = utils.initialize_data(True, trX)
-    
-    # LOAD PCA:
-    if os.path.exists(pca_file_str):
-        pca_obj = torch.load(pca_file_str, weights_only=True, map_location=device)
-        pca_obj.to(device)
-        log.info("")
-        log.info("    PCA loaded.")
-        log.info("")
-        X_pca = pca_obj.transform(data)
-        assert pca_obj.n_features_in_ == data.shape[1], "    Computed PCA and training data do not have the same number of features"
-    else:
-        raise FileNotFoundError
-    input = X_pca.to(device)
     
     # INFERENCE:
     model.eval()
     Q = torch.tensor([], device=device)
     log.info("    Running inference...")
     with torch.inference_mode():
-        dataloader = dataloader_inference(input, batch_size_inference_Q, seed, generator, num_gpus, pin, num_cpus)
+        dataloader = dataloader_admixture(data, batch_size_inference_Q, seed, generator, num_gpus, pin, num_cpus)
         for input_step in dataloader:
             input_step = input_step.to(device)
             probs = model(input_step)

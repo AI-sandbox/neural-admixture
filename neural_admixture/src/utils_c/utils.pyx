@@ -19,7 +19,7 @@ cpdef double loglikelihood(const unsigned char[:,::1] G,
                            double[:,::1] P,
                            const double[:,::1] Q,
                            size_t K,
-                           double eps=1e-5) noexcept nogil:
+                           double eps=1e-6) noexcept nogil:
     cdef:
         size_t N = G.shape[0]
         size_t M = G.shape[1]
@@ -31,18 +31,19 @@ cpdef double loglikelihood(const unsigned char[:,::1] G,
         p = &P[j,0]
         for i in range(N):
             if G[i,j] != 3:
+                
                 rec = _reconstruct(p, &Q[i,0], K)
-                # Clamp rec to [eps, 1 - eps]
                 if rec < eps:
                     rec = eps
                 elif rec > 1.0 - eps:
                     rec = 1.0 - eps
-                # Clamp g_d to [eps, 2 - eps]
+                
                 g_d = <double>G[i,j]
                 if g_d < eps:
                     g_d = eps
                 elif g_d > 2.0 - eps:
                     g_d = 2.0 - eps
+                
                 logl += g_d * log(rec) + (2.0 - g_d) * log1p(-rec)
     return logl
 
