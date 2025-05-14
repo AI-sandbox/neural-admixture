@@ -106,6 +106,9 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
         
         if master:
             data = data.numpy()
+            P = P.astype(np.float64)
+            Q = Q.astype(np.float64)
+            
             logl = utils.loglikelihood(data, P, Q, K)
             log.info(f"    Log-likelihood: {logl:2f}.")
         return P, Q, model

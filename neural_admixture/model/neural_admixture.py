@@ -24,7 +24,7 @@ class Q_P(torch.nn.Module):
         P (Optional[torch.Tensor], optional): The P matrix to be optimized. Defaults to None.
         is_train (bool): Indicates whether the model is in training mode (True) or inference mode (False). Defaults to True.
     """
-    def __init__(self, hidden_size: int, num_features: int, k: int, V: torch.Tensor, P: torch.Tensor=None,
+    def __init__(self, hidden_size: int, num_features: int, k: int, V: torch.Tensor=None, P: torch.Tensor=None,
                 is_train: bool=True) -> None:
         """
         Initialize the Q_P module with the given parameters.
@@ -43,7 +43,10 @@ class Q_P(torch.nn.Module):
         if P is not None:
             self.P = torch.nn.Parameter(P)
         
-        self.V = torch.nn.Parameter(V)
+        if V is not None:
+            self.V = torch.nn.Parameter(V)
+        else:
+            self.V = None
         
         self.num_features = num_features
         self.batch_norm = torch.nn.RMSNorm(self.num_features, eps=1e-8)
@@ -278,10 +281,10 @@ class NeuralAdmixture():
                 if self.num_gpus>0:
                     unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
                     self.pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
-                    out, _ = self.model(unpacked_step)
+                    probs, _ = self.model(unpacked_step)
                 else:
-                    out, _ = self.model(x_step)
-                Q = torch.cat((Q, out), dim=0)
+                    probs, _ = self.model(x_step)
+                Q = torch.cat((Q, probs), dim=0)
         if self.num_gpus>1:
             torch.distributed.broadcast(Q, src=0)
 
