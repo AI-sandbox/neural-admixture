@@ -15,15 +15,16 @@ log = logging.getLogger(__name__)
 class Q_P(torch.nn.Module):
     """
     Q_P model.
-    
+
     Args:
         hidden_size (int): The size of the hidden layer.
         num_features (int): The number of features in the input data.
         k (int): The number of output classes or components.
+        V (torch.Tensor): The projection matrix used to map inputs to PCA space.
         P (Optional[torch.Tensor], optional): The P matrix to be optimized. Defaults to None.
-        
+        is_train (bool): Indicates whether the model is in training mode (True) or inference mode (False). Defaults to True.
     """
-    def __init__(self, hidden_size: int, num_features: int, k: int, P: torch.Tensor=None, V: torch.Tensor=None, 
+    def __init__(self, hidden_size: int, num_features: int, k: int, V: torch.Tensor, P: torch.Tensor=None,
                 is_train: bool=True) -> None:
         """
         Initialize the Q_P module with the given parameters.
@@ -33,7 +34,9 @@ class Q_P(torch.nn.Module):
             num_features (int): The number of features in the input data.
             k (int): The number of output classes or components.
             activation (torch.nn.Module): The activation function to use in the encoder.
+            V (torch.Tensor): The projection matrix used to map inputs to PCA space.
             P (Optional[torch.Tensor], optional): The P matrix to be optimized. Defaults to None.
+            is_train (bool): Indicates whether the model is in training mode (True) or inference mode (False). Defaults to True.
         """
         super(Q_P, self).__init__()
         self.k = k
@@ -72,7 +75,9 @@ class Q_P(torch.nn.Module):
             X (torch.Tensor): A tensor of input data.
 
         Returns:
-            torch.Tensor: The result of the forward pass, which is either probabilities or a transformed tensor clamped between 0 and 1.
+            Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]: 
+                - If training: A tuple containing the transformed tensor (clamped between 0 and 1) and the probability tensor.
+                - If inference: The probability tensor.
         """
         X = X.float() / 2
         X = torch.where(X == 1.5, 0.0, X)
@@ -137,16 +142,18 @@ class Q_P(torch.nn.Module):
 class NeuralAdmixture():
     """
     Neural Admixture class.
-    
+
     Args:
-            k (int): Number of components for clustering.
-            epochs (int): Number of epochs.
-            batch_size (int): Batch size.
-            learning_rate (float): Learning rate.
-            device (torch.device): Device for computation (e.g., 'cuda' or 'cpu').
-            seed (int): Random seed for reproducibility.
-            num_gpus (int): Number of GPUs available for training.
-            device_tensors (torch.device): Device for tensor data.
+        k (int): Number of components for clustering.
+        epochs (int): Number of training epochs.
+        batch_size (int): Size of each training batch.
+        learning_rate (float): Learning rate for optimization.
+        device (torch.device): Device to perform computations on (e.g., 'cuda' or 'cpu').
+        seed (int): Random seed for reproducibility.
+        num_gpus (int): Number of GPUs available for training.
+        master (bool): Indicates if the current process is the master process (used for logging/output control in multi-GPU settings).
+        pack2bit (Any): Encoding used for compressing data in 2 bit format.
+        supervised_loss_weight (Optional[float]): Weight of the supervised loss component (if using supervised training). Defaults to None.
     """
     def __init__(self, k: int, epochs: int, batch_size: int, learning_rate: float, device: torch.device, seed: int, num_gpus: int,
                 master: bool, pack2bit, supervised_loss_weight: Optional[float]=None):
@@ -155,14 +162,15 @@ class NeuralAdmixture():
 
         Args:
             k (int): Number of components for clustering.
-            epochs (int): Number of epochs.
-            batch_size (int): Batch size.
-            learning_rate (float): Learning rate for all parameters.
-            device (torch.device): Device for computation (e.g., 'cuda' or 'cpu').
+            epochs (int): Number of training epochs.
+            batch_size (int): Size of each training batch.
+            learning_rate (float): Learning rate for optimization.
+            device (torch.device): Device to perform computations on (e.g., 'cuda' or 'cpu').
             seed (int): Random seed for reproducibility.
             num_gpus (int): Number of GPUs available for training.
-            device_tensors (torch.device): Device for tensor data.
-            master (bool): Wheter or not this process is the master for printing the output.
+            master (bool): Indicates if the current process is the master process (used for logging/output control in multi-GPU settings).
+            pack2bit (Any): Encoding used for compressing data in 2 bit format.
+            supervised_loss_weight (Optional[float]): Weight of the supervised loss component (if using supervised training). Defaults to None.
         """
         super(NeuralAdmixture, self).__init__()
         
@@ -170,7 +178,6 @@ class NeuralAdmixture():
         self.k = k
         self.num_gpus = num_gpus
         self.device = device
-        self.pin = True #True if 'gpu' in device_tensors.type else False
         self.master = master
         
         # Random seed configuration
@@ -190,23 +197,22 @@ class NeuralAdmixture():
         #Pack2bit function
         self.pack2bit = pack2bit
         
-    def initialize_model(self, p_tensor: torch.Tensor, hidden_size: int, num_features: int, 
+    def initialize_model(self, P: torch.Tensor, hidden_size: int, num_features: int, 
                          k: int, V: torch.Tensor) -> None:
         """
         Initializes the Q_P model and sets up distributed training if applicable.
 
         Args:
-            p_tensor (torch.Tensor): P tensor to initialize the model.
-            hidden_size (int): Hidden layer size for the encoder.
-            num_features (int): Number of input features.
-            k (int): Number of clusters or components.
-            activation (torch.nn.Module): Activation function for the encoder layers.
-            num_total_elements (int): Total number of elements in the dataset.
+            P (torch.Tensor): Tensor representing the initial P matrix (e.g., allele frequencies).
+            hidden_size (int): Number of units in the hidden layer of the encoder.
+            num_features (int): Dimensionality of the input features.
+            k (int): Number of components or clusters.
+            V (torch.Tensor): PCA projection matrix used to reduce input dimensionality.
 
         Returns:
             None
         """
-        self.base_model = Q_P(hidden_size, num_features, k, p_tensor, V).to(self.device)
+        self.base_model = Q_P(hidden_size, num_features, k, V, P).to(self.device)
         if self.device.type == 'cuda':
             self.model = torch.compile(self.base_model)
         if self.num_gpus > 1 and torch.distributed.is_initialized():
@@ -220,20 +226,24 @@ class NeuralAdmixture():
     def launch_training(self, P: torch.Tensor, data: torch.Tensor, hidden_size:int, num_features:int, 
                         k:int, V: torch.Tensor, M: int, N: int, y: Optional[torch.Tensor]=None) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
-        Launches the training process, which includes two distinct phases and the inference step to compute Q.
+        Launches the training process, which includes two distinct phases and a final inference step to compute Q.
 
         Args:
-            Q (torch.Tensor): Initial tensor for Q matrix.
-            P (torch.Tensor): Initial tensor for P matrix.
-            data (torch.Tensor): Input data matrix.
-            hidden_size (int): Size of the hidden layer in the model.
-            num_features (int): Number of features in the input data.
-            k (int): Number of latent components or clusters.
-            activation (torch.nn.Module): Activation function for the model.
-            input (torch.Tensor): Input tensor for phase 2 network.
+            P (torch.Tensor): Initial tensor for the P matrix.
+            data (torch.Tensor): Input data matrix (e.g., genotype matrix).
+            hidden_size (int): Size of the hidden layer in the encoder.
+            num_features (int): Number of input features (e.g., SNPs).
+            k (int): Number of latent components or population clusters.
+            V (torch.Tensor): PCA projection matrix used for dimensionality reduction.
+            M (int): Number of SNPs (columns) in the dataset.
+            N (int): Number of individuals (rows) in the dataset.
+            y (Optional[torch.Tensor]): Optional labels for supervised loss (if available).
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]: Processed P, Q matrices and the raw model.
+            Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]: A tuple containing:
+                - Trained P matrix.
+                - Inferred Q matrix.
+                - Trained raw model (Q_P instance).
         """ 
         #SETUP:
         self.M = M
@@ -286,10 +296,11 @@ class NeuralAdmixture():
 
     def _run_epoch(self, epoch, dataloader: torch.utils.data.DataLoader):
         """
-        Executes one epoch of training for Phase 2.
+        Executes one epoch of training.
         
         Args:
-            dataloader (Dataloader): Dataloader of phase 2.
+            epoch (int): Number of current epoch.
+            dataloader (Dataloader): Dataloader
         """
         loss_acc = 0
         for x_step in dataloader:
@@ -310,11 +321,10 @@ class NeuralAdmixture():
         
     def _run_step(self, x_step: torch.Tensor) -> torch.Tensor:
         """
-        Executes one training step for Phase 2.
+        Executes one training step.
 
         Args:
-            X (torch.Tensor): Batch of X data.
-            input_step (torch.Tensor): Batch of input data.
+            x_step (torch.Tensor): Batch of X data.
 
         Returns:
             torch.Tensor: Computed loss for the batch.
@@ -326,10 +336,11 @@ class NeuralAdmixture():
     
     def _run_epoch_supervised(self, epoch, dataloader: torch.utils.data.DataLoader):
         """
-        Executes one epoch of training for Phase 2 (supervised version).
+        Executes one epoch of training (supervised version).
         
         Args:
-            dataloader (Dataloader): Dataloader of phase 2.
+            epoch (int): Number of current epoch.
+            dataloader (Dataloader): Dataloader.
         """
         loss_acc = 0
         for X, input_step, y in dataloader:
@@ -348,11 +359,10 @@ class NeuralAdmixture():
             
     def _run_step_supervised(self, X: torch.Tensor,  input_step: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
-        Executes one training step for Phase 2.
+        Executes one training step.
 
         Args:
             X (torch.Tensor): Batch of X data.
-            input_step (torch.Tensor): Batch of input data.
 
         Returns:
             torch.Tensor: Computed loss for the batch.
@@ -440,17 +450,26 @@ class NeuralAdmixture():
             return float('nan')
         
     @staticmethod
-    def _loglikelihood(Q: torch.Tensor, P: torch.Tensor, data: torch.Tensor,
-                      master: bool, M: int, device: torch.device, pack2bit, num_gpus, 
-                      eps: float = 1e-7) -> None:
-        """Compute deviance for a single K using PyTorch tensors in batches of 2048 samples.
+    def _loglikelihood(Q: torch.Tensor, P: torch.Tensor, data: torch.Tensor, master: bool, M: int, device: torch.device, 
+                    pack2bit, num_gpus: int, eps: float = 1e-7) -> None:
+        """
+        Compute the deviance (log-likelihood loss) for a single K using PyTorch tensors, 
+        processed in batches of 2048 samples to manage memory usage.
 
         Args:
-            Q (torch.Tensor): Matrix Q (shape N x K).
-            P (torch.Tensor): Matrix P (shape K x M).
-            data (torch.Tensor): original data (shape N x M).
-            master (bool): flag to indicate if this is the master process.
-            eps (float, optional): epsilon term to avoid numerical errors. Defaults to 1e-7.
+            Q (torch.Tensor): Admixture proportion matrix (shape N x K), where N is the number of samples 
+                            and K is the number of components.
+            P (torch.Tensor): Allele frequency matrix (shape K x M), where M is the number of SNPs.
+            data (torch.Tensor): Original genotype data matrix (shape N x M).
+            master (bool): Flag indicating if this is the master process (controls logging/output).
+            M (int): Number of SNPs (columns/features in data).
+            device (torch.device): Device on which computation is performed ('cuda' or 'cpu').
+            pack2bit: Utility or function to decode packed 2-bit encoded genotype data.
+            num_gpus (int): Number of GPUs available (used for distributed evaluation logic).
+            eps (float, optional): Small constant to avoid numerical instability in log computations. Defaults to 1e-7.
+
+        Returns:
+            None
         """
         if master:
             batch_size = 2048
