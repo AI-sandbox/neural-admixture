@@ -41,7 +41,7 @@ class Q_P(torch.nn.Module):
         if P is not None:
             self.P = torch.nn.Parameter(P)
         
-        self.V = V
+        self.V = torch.nn.Parameter(V)
         
         self.num_features = num_features
         self.batch_norm = torch.nn.RMSNorm(self.num_features, eps=1e-8)
@@ -104,7 +104,8 @@ class Q_P(torch.nn.Module):
         p = [
         {'params': self.P, 'lr': lr},
         {'params': self.common_encoder.parameters(), 'lr': lr},
-        {'params': self.batch_norm.parameters(), 'lr': lr}
+        {'params': self.batch_norm.parameters(), 'lr': lr},
+        {'params': self.V, 'lr': lr}
             ]
         return torch.optim.Adam(p, betas=[0.9, 0.95], fused=True)
     
