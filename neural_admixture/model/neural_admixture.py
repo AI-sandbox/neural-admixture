@@ -381,7 +381,7 @@ class NeuralAdmixture():
                     Qs[i]= torch.cat((Qs[i], probs[i]), dim=0)
                     
         if self.num_gpus>1:
-            torch.distributed.broadcast(Q, src=0)
+            torch.distributed.broadcast(Qs, src=0)
 
         if self.master:
             log.info("")
