@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 # High-level randomized SVD function
 # -----------------------------------------------------------------------------
 
-def randomized_svd_uint8_input(A_uint8, k, N, M, oversampling=10, power_iterations=4):
+def randomized_svd_uint8_input(A_uint8, N, M, k=8,oversampling=10, power_iterations=4):
     """
     Randomized SVD para matrices uint8 de forma (n_features, m_samples).
     Retorna Vt_k de forma (k, m_samples).

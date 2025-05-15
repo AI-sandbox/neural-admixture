@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
         data: torch.Tensor, device: torch.device, num_gpus: int, hidden_size: int, 
-        master: bool, V: np.ndarray) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+        master: bool, V: np.ndarray, min_k: int, max_k: int, n_components: int) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Initializes P and Q matrices and trains a neural admixture model using GMM.
 
@@ -42,7 +42,7 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
             Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]: Initialized P matrix, Q matrix, and trained model.
         """
         if master:
-            log.info("    Running Random initialization...")
+            log.info("    Running initialization...")
 
         N, M = data.shape
     
@@ -51,7 +51,7 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
             data = data.numpy()
 
             # PCA:
-            X_pca = np.zeros((N, K), dtype=np.float32)
+            X_pca = np.zeros((N, n_components), dtype=np.float32)
             for i in range(0, N, 1024):
                 end_idx = min(i + 1024, N)
                 batch = data[i:end_idx, :].astype(np.float32)/2
@@ -61,23 +61,28 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
             log.info("")
             log.info("    Running Gaussian Mixture in PCA subspace...")
             log.info("")
-            gmm = GaussianMixture(n_components=K, n_init=5, init_params='k-means++', tol=1e-4, covariance_type='full', max_iter=100, random_state=seed)        
-            gmm.fit(X_pca)
+            if K is not None:
+                gmm = GaussianMixture(n_components=K, n_init=5, init_params='k-means++', tol=1e-4, covariance_type='full', max_iter=100, random_state=seed)        
+                gmm.fit(X_pca)
+                P = np.clip((gmm.means_@V), 5e-6, 1 - 5e-6)
+                del gmm
+            else:
+                gmm_objs = [GaussianMixture(n_components=K, n_init=5, init_params='k-means++', tol=1e-4, covariance_type='full', max_iter=100, random_state=seed).fit(X_pca) for K in range(min_k, max_k + 1)]
+                P = np.concatenate([np.clip((obj.means_@V), 5e-6, 1 - 5e-6) for obj in gmm_objs], axis=0)
+                del gmm_objs
             del X_pca
-            
-            P = np.ascontiguousarray(np.clip((gmm.means_@V).T, 5e-6, 1 - 5e-6), dtype=np.float32)
-            del gmm
             
             data = torch.as_tensor(data, dtype=torch.uint8, device='cpu')
 
         if torch.distributed.is_initialized():    
             dist.barrier()
+        
         if num_gpus>1:
             if master:
                 P_init = torch.as_tensor(P, dtype=torch.float32, device=device).contiguous()
                 V = torch.as_tensor(V.T, dtype=torch.float32, device=device).contiguous()
             else:
-                P_init = torch.empty((M, K), dtype=torch.float32, device=device)
+                P_init = torch.empty((K, M), dtype=torch.float32, device=device)
                 V = torch.empty((M, K), dtype=torch.float32, device=device)
             
             if master:
@@ -100,15 +105,22 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
         else:
             pack2bit=None
             packed_data = data
-        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, master, pack2bit)
         
-        P, Q, model = model.launch_training(P_init, packed_data, hidden_size, V.shape[1], K, V, M, N)
+        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, master, pack2bit, min_k, max_k)
+        Qs, Ps, model = model.launch_training(P_init, packed_data, hidden_size, V.shape[1], V, M, N)
         
         if master:
             data = data.numpy()
-            P = P.astype(np.float64)
-            Q = Q.astype(np.float64)
-            
-            logl = utils.loglikelihood(data, P, Q, K)
-            log.info(f"    Log-likelihood: {logl:2f}.")
-        return P, Q, model
+            if K is not None:
+                P = np.ascontiguousarray(Ps[0].astype(np.float64))
+                Q = np.ascontiguousarray(Qs[0].astype(np.float64))
+                logl = utils.loglikelihood(data, P, Q, K)
+                log.info(f"    Log-likelihood: {logl:2f}.")
+            else:
+                for i, K in enumerate(range(min_k, max_k + 1)):
+                    P = np.ascontiguousarray(Ps[i].astype(np.float64))
+                    Q = np.ascontiguousarray(Qs[i].astype(np.float64))
+                    logl = utils.loglikelihood(data, P, Q, K)
+                    log.info(f"    Log-likelihood for K={K}: {logl:2f}.")
+                
+        return Ps, Qs, model

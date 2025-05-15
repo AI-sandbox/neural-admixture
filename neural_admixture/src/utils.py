@@ -26,11 +26,15 @@ def parse_train_args(argv: List[str]):
     parser.add_argument('--learning_rate', required=False, default=25e-4, type=float, help='Learning rate.')
 
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
-    parser.add_argument('--k', required=True, type=int, help='Number of populations/clusters.')
+    parser.add_argument('--k', required=False, type=int, help='Number of populations/clusters.')
+    parser.add_argument('--min_k', required=False, type=int, help='Minimum number of populations/clusters (multi-head)')
+    parser.add_argument('--max_k', required=False, type=int, help='Maximum number of populations/clusters (multi-head)')
     parser.add_argument('--hidden_size', required=False, default=1024, type=int, help='Dimension of first projection in encoder.')
     parser.add_argument('--save_dir', required=True, type=str, help='Save model in this directory')
     parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data')
     parser.add_argument('--name', required=True, type=str, help='Experiment/model name')
+    
+    parser.add_argument('--n_components', required=False, type=int, default=8, help='Number of components to use for the SVD initialization.')
     
     parser.add_argument('--num_gpus', required=False, default=0, type=int, help='Number of GPUs to be used in the execution.')
     parser.add_argument('--num_cpus', required=False, default=1, type=int, help='Number of CPUs to be used in the execution.')
@@ -71,28 +75,39 @@ def read_data(tr_file: str) -> np.ndarray:
    
     return data, data.shape[0], data.shape[1]
 
-def write_outputs(Q: np.ndarray, run_name: str, K: int, out_path: str, P: np.ndarray=None) -> None:
+def write_outputs(Qs: np.ndarray, run_name: str, K: int, min_k: int, max_k: int, out_path: str, Ps: np.ndarray = None) -> None:
     """
     Save the Q and optional P matrices to specified output files.
 
     Args:
-        Q (numpy.ndarray): Q matrix to be saved.
+        Qs (list of numpy.ndarray): List of Q matrices to be saved.
         run_name (str): Identifier for the run, used in file naming.
         K (int): Number of clusters, included in the file name.
+        min_k (int): Minimum number of clusters (for range output).
+        max_k (int): Maximum number of clusters (for range output).
         out_path (str or Path): Directory where the output files should be saved.
-        P (numpy.ndarray, optional): P matrix to be saved, if provided. Defaults to None.
+        Ps (list of numpy.ndarray, optional): List of P matrices to be saved, if provided.
 
     Returns:
         None
     """
     out_path = Path(out_path)
-    np.savetxt(out_path/f"{run_name}.{K}.Q", Q, delimiter=' ')
-    if P is not None:
-        np.savetxt(out_path/f"{run_name}.{K}.P", P, delimiter=' ')
-        log.info("    Q and P matrices saved.")
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    if K is not None:
+        np.savetxt(out_path / f"{run_name}.{K}.Q", Qs[0], delimiter=' ')
+        if Ps is not None:
+            np.savetxt(out_path / f"{run_name}.{K}.P", Ps[0], delimiter=' ')
+            log.info("    Q and P matrices saved.")
+        else:
+            log.info("    Q matrix saved.")
     else:
-        log.info("    Q matrix saved.")
-    return 
+        for i, K in enumerate(range(min_k, max_k + 1)):
+            np.savetxt(out_path / f"{run_name}.{K}.Q", Qs[i], delimiter=' ')
+            if Ps is not None:
+                np.savetxt(out_path / f"{run_name}.{K}.P", Ps[i], delimiter=' ')
+        log.info("    Q and P matrices saved for all K." if Ps is not None else "    Q matrices saved for all K.")
+
 
 def ddp_setup(stage: str, rank: int, world_size: int) -> None:
     """

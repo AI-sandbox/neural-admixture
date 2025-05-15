@@ -86,12 +86,12 @@ def main():
         from .src import main
         
         data_path = arg_list[arg_list.index('--data_path') + 1]
-        K = int(arg_list[arg_list.index('--k') + 1])
+        n_components = int(arg_list[arg_list.index('--n_components') + 1]) if '--n_components' in arg_list else 8
         data, N, M = utils.read_data(data_path)
         log.info("")
         log.info("    Running SVD...")
         log.info("")
-        V = randomized_svd_uint8_input(data, K, N, M)
+        V = randomized_svd_uint8_input(data, N, M, n_components)
         data = torch.as_tensor(data, dtype=torch.uint8).share_memory_()
         
         if num_gpus>1:

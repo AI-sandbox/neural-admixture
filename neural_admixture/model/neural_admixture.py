@@ -4,13 +4,98 @@ import json
 import torch
 
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from tqdm.auto import tqdm
 
 from ..src.loaders import dataloader_admixture
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
+
+class NeuralEncoder(torch.nn.Module):
+    """
+    Neural network encoder component. Creates a separate linear head
+    for each specified value of k in the provided ks list.
+    """
+    def __init__(self, input_size, ks):
+        """
+        Args:
+            input_size (int): Dimension of the input features (output of common encoder).
+            ks (list[int]): A list of K values for which to create encoder heads.
+        """
+        super().__init__()
+        self.ks = sorted(ks)
+        self.min_k_val = min(self.ks)
+        self.heads = torch.nn.ModuleList([torch.nn.Linear(input_size, k_val, bias=True) for k_val in self.ks])
+
+    def _get_head_for_k(self, k_val):
+        """Retrieves the specific encoder head for a given K value."""
+        index = k_val - self.min_k_val
+        if index < 0 or index >= len(self.heads):
+            raise ValueError(f"K value {k_val} not found in the specified ks list {self.ks}")
+        return self.heads[index]
+
+    def forward(self, X):
+        """
+        Forward pass through the encoder.
+
+        Args:
+            X (torch.Tensor): Input data tensor from the common encoder.
+
+        Returns:
+            list[torch.Tensor]: A list of output tensors (hidden states), one for each K in self.ks.
+        """
+        outputs = [self._get_head_for_k(k_val)(X) for k_val in self.ks]
+        return outputs
+
+class NeuralDecoder(torch.nn.Module):
+    """
+    Neural network decoder component. Creates a separate linear decoder
+    for each specified value of k, initialized with corresponding parts
+    of the initial P matrix.
+    """
+    def __init__(self, output_size, inits, ks):
+        """
+        Args:
+            output_size (int): Dimension of the output (number of markers M).
+            inits (torch.Tensor): The initial P matrix (M, sum(ks)).        
+            ks (list[int]): A list of K values for which to create decoders.
+        """
+        super().__init__()
+        self.output_size = output_size
+        self.ks = sorted(ks) 
+        self.min_k_val = min(self.ks)
+    
+        layers = [None]*len(self.ks)
+        ini = 0
+        for i in range(len(self.ks)):
+            end = ini+self.ks[i]
+            layers[i] = torch.nn.Linear(self.ks[i], output_size, bias=False)
+            layers[i].weight = torch.nn.Parameter(inits[ini:end].T)
+            ini = end
+        self.decoders = torch.nn.ModuleList(layers)
+        
+    def _get_decoder_for_k(self, k_val):
+        """Retrieves the specific decoder for a given K value."""
+        index = k_val - self.min_k_val
+        return self.decoders[index]
+
+    def forward(self, probs):
+        """
+        Forward pass through the decoder.
+
+        Args:
+            probs (list[torch.Tensor]): A list of probability tensors.
+
+        Returns:
+            list[torch.Tensor]: A list of output tensors (reconstructions).
+        """
+        outputs = []
+        for i, k_val in enumerate(self.ks):
+            decoder = self._get_decoder_for_k(self.ks[i])
+            output = decoder(probs[i])
+            outputs.append(torch.clamp_(output, 0, 1))
+        return outputs
 
 class Q_P(torch.nn.Module):
     """
@@ -24,8 +109,8 @@ class Q_P(torch.nn.Module):
         P (Optional[torch.Tensor], optional): The P matrix to be optimized. Defaults to None.
         is_train (bool): Indicates whether the model is in training mode (True) or inference mode (False). Defaults to True.
     """
-    def __init__(self, hidden_size: int, num_features: int, k: int, V: torch.Tensor=None, P: torch.Tensor=None,
-                is_train: bool=True) -> None:
+    def __init__(self, hidden_size: int, num_features: int, V: torch.Tensor=None, P: torch.Tensor=None,
+                ks_list: List=[], is_train: bool=True) -> None:
         """
         Initialize the Q_P module with the given parameters.
 
@@ -39,9 +124,7 @@ class Q_P(torch.nn.Module):
             is_train (bool): Indicates whether the model is in training mode (True) or inference mode (False). Defaults to True.
         """
         super(Q_P, self).__init__()
-        self.k = k
-        if P is not None:
-            self.P = torch.nn.Parameter(P)
+        self.ks_list = ks_list
         
         if V is not None:
             self.V = torch.nn.Parameter(V)
@@ -54,9 +137,9 @@ class Q_P(torch.nn.Module):
         self.hidden_size = hidden_size
         self.common_encoder = torch.nn.Sequential(
             torch.nn.Linear(self.num_features, self.hidden_size, bias=True),
-            self.encoder_activation,
-            torch.nn.Linear(self.hidden_size, self.k, bias=True)
-        )
+            self.encoder_activation)
+        self.multihead_encoder = NeuralEncoder(self.hidden_size, ks=self.ks_list)
+        self.decoders = NeuralDecoder(self.num_features, P, ks=self.ks_list)
         self.softmax = torch.nn.Softmax(dim=1)
         
         if is_train:
@@ -65,7 +148,7 @@ class Q_P(torch.nn.Module):
             self.return_func = self._return_infer
                 
     def _return_training(self, probs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        return torch.clamp_(torch.nn.functional.linear(probs, self.P), 0, 1), probs
+        return self.decoders(probs), probs
     
     def _return_infer(self, probs: torch.Tensor) -> torch.Tensor:
         return probs
@@ -87,8 +170,9 @@ class Q_P(torch.nn.Module):
         
         X_pca = X@self.V
         X_pca = self.batch_norm(X_pca)
-        hid_states = self.common_encoder(X_pca)
-        probs = self.softmax(hid_states)
+        enc = self.common_encoder(X_pca)
+        hid_states = self.multihead_encoder(enc)
+        probs = [self.softmax(h) for h in hid_states]
         return self.return_func(probs), X
 
     @torch.no_grad()
@@ -96,7 +180,8 @@ class Q_P(torch.nn.Module):
         """
         Restrict the values of P matrix within the range [0, 1].
         """
-        self.P.clamp_(0., 1.)
+        for dec in self.decoders.decoders:
+            dec.weight.data.clamp_(0., 1.)
     
     def create_custom_adam(self, lr: float=1e-5) -> torch.optim.Adam:
         """
@@ -109,11 +194,12 @@ class Q_P(torch.nn.Module):
             optim.Adam: The Adam optimizer configured with the specified learning rates.
         """
         p = [
-        {'params': self.P, 'lr': lr},
+        {'params': self.multihead_encoder.parameters(), 'lr': lr},
         {'params': self.common_encoder.parameters(), 'lr': lr},
         {'params': self.batch_norm.parameters(), 'lr': lr},
-        {'params': self.V, 'lr': lr}
-            ]
+        {'params': self.V, 'lr': lr},
+        {'params': self.decoders.parameters(), 'lr': lr}
+        ]
         return torch.optim.Adam(p, betas=[0.9, 0.95], fused=True)
     
     def save_config(self, name: str, save_dir: str) -> None:
@@ -131,7 +217,7 @@ class Q_P(torch.nn.Module):
         }
         
         _config = {
-            'k': self.k,
+            'ks': self.ks_list,
             'num_features': self.num_features,
             'hidden_size': self.hidden_size,
             'activation': _activations.get(type(self.encoder_activation), str(self.encoder_activation)),
@@ -159,7 +245,7 @@ class NeuralAdmixture():
         supervised_loss_weight (Optional[float]): Weight of the supervised loss component (if using supervised training). Defaults to None.
     """
     def __init__(self, k: int, epochs: int, batch_size: int, learning_rate: float, device: torch.device, seed: int, num_gpus: int,
-                master: bool, pack2bit, supervised_loss_weight: Optional[float]=None):
+                master: bool, pack2bit, min_k: int, max_k: int, supervised_loss_weight: Optional[float]=None):
         """
         Initializes the NeuralAdmixture class with training parameters and settings.
 
@@ -179,6 +265,14 @@ class NeuralAdmixture():
         
         # Model configuration:
         self.k = k
+        self.min_k = min_k
+        self.max_k = max_k
+        
+        if k is not None:
+            self.ks_list = [self.k]
+        else:
+            self.ks_list = list(range(self.min_k, self.max_k + 1))
+        
         self.num_gpus = num_gpus
         self.device = device
         self.master = master
@@ -200,8 +294,7 @@ class NeuralAdmixture():
         #Pack2bit function
         self.pack2bit = pack2bit
         
-    def initialize_model(self, P: torch.Tensor, hidden_size: int, num_features: int, 
-                         k: int, V: torch.Tensor) -> None:
+    def initialize_model(self, P: torch.Tensor, hidden_size: int, num_features: int, V: torch.Tensor, ks_list: List) -> None:
         """
         Initializes the Q_P model and sets up distributed training if applicable.
 
@@ -215,7 +308,7 @@ class NeuralAdmixture():
         Returns:
             None
         """
-        self.base_model = Q_P(hidden_size, num_features, k, V, P).to(self.device)
+        self.base_model = Q_P(hidden_size, num_features, V, P, ks_list).to(self.device)
         if self.device.type == 'cuda':
             self.model = torch.compile(self.base_model)
         if self.num_gpus > 1 and torch.distributed.is_initialized():
@@ -227,7 +320,7 @@ class NeuralAdmixture():
             self.raw_model = self.base_model
                 
     def launch_training(self, P: torch.Tensor, data: torch.Tensor, hidden_size:int, num_features:int, 
-                        k:int, V: torch.Tensor, M: int, N: int, y: Optional[torch.Tensor]=None) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+                        V: torch.Tensor, M: int, N: int, y: Optional[torch.Tensor]=None) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Launches the training process, which includes two distinct phases and a final inference step to compute Q.
 
@@ -253,7 +346,7 @@ class NeuralAdmixture():
         self.N = N
         torch.set_float32_matmul_precision('medium')
         torch.set_flush_denormal(True)
-        self.initialize_model(P, hidden_size, num_features, k, V)
+        self.initialize_model(P, hidden_size, num_features, V, self.ks_list)
         if y is None:
             y = torch.zeros(data.size(0), device='cpu')
             run_epoch = self._run_epoch
@@ -274,7 +367,7 @@ class NeuralAdmixture():
         self.raw_model.return_func = self.raw_model._return_infer
         batch_size_inference_Q = min(data.shape[0], 5000)
         self.model.eval()
-        Q = torch.tensor([], device=self.device)
+        Qs = [torch.tensor([], device=self.device) for k in self.ks_list]
         with torch.inference_mode():
             dataloader = dataloader_admixture(data, batch_size_inference_Q, 1 if self.num_gpus >= 1 else 0, self.seed, self.generator, y, shuffle=False)
             for x_step in dataloader:
@@ -284,7 +377,9 @@ class NeuralAdmixture():
                     probs, _ = self.model(unpacked_step)
                 else:
                     probs, _ = self.model(x_step)
-                Q = torch.cat((Q, probs), dim=0)
+                for i, k in enumerate(self.ks_list):
+                    Qs[i]= torch.cat((Qs[i], probs[i]), dim=0)
+                    
         if self.num_gpus>1:
             torch.distributed.broadcast(Q, src=0)
 
@@ -295,7 +390,7 @@ class NeuralAdmixture():
             
         #RETURN OUTPUT:
         self.display_divergences(self.k)
-        return self.process_results(data, Q)
+        return self.process_results(Qs)
 
     def _run_epoch(self, epoch, dataloader: torch.utils.data.DataLoader):
         """
@@ -334,7 +429,7 @@ class NeuralAdmixture():
         """
         self.optimizer.zero_grad(set_to_none=True)
         recs, x_step = self.model(x_step)
-        loss = self.loss_function(recs[0], x_step)
+        loss = sum((self.loss_function(rec, x_step) for rec in recs[0]))
         return loss
     
     def _run_epoch_supervised(self, epoch, dataloader: torch.utils.data.DataLoader):
@@ -389,29 +484,30 @@ class NeuralAdmixture():
             of estimated populations, providing a measure of genetic divergence.
         """
         if self.master:
-            dec = self.raw_model.P.data.detach().to('cpu')
-            header = '\t'.join([f'Pop{p}' for p in range(k - 1)])
-            
-            log.info("    Results:")
-            log.info(f'\n            Fst divergences between estimated populations: (K = {k})')
-            log.info("")
-            log.info(f'                \t{header}')
-            log.info('            Pop0')
-            
-            for j in range(1, k):
-                output = f'            Pop{j}'
-                pop2 = dec[:, j]
+            for i, k in enumerate(self.ks_list):
+                dec = self.raw_model.decoders.decoders[i].weight.data
+                header = '\t'.join([f'Pop{p}' for p in range(k - 1)])
                 
-                for l in range(j):
-                    pop1 = dec[:, l]
-                    fst = self._hudsons_fst(pop1, pop2)
-                    output += f"\t{fst:0.3f}"
+                log.info("    Results:")
+                log.info(f'\n            Fst divergences between estimated populations: (K = {k})')
+                log.info("")
+                log.info(f'                \t{header}')
+                log.info('            Pop0')
+                
+                for j in range(1, k):
+                    output = f'            Pop{j}'
+                    pop2 = dec[:, j]
+                    
+                    for l in range(j):
+                        pop1 = dec[:, l]
+                        fst = self._hudsons_fst(pop1, pop2)
+                        output += f"\t{fst:0.3f}"
 
-                log.info(output)
-            
-            log.info("\n")
+                    log.info(output)
+                
+                log.info("\n")
 
-    def process_results(self, data: torch.Tensor, Q: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+    def process_results(self, Qs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Processes and logs final results after training.
 
@@ -425,7 +521,9 @@ class NeuralAdmixture():
         Details:
             - Computes and logs the log-likelihood of the model given the data.
         """
-        return self.raw_model.P.data.detach().cpu().numpy(), Q.cpu().numpy(), self.raw_model
+        Ps = [dec.weight.data.detach().cpu().numpy() for dec in self.raw_model.decoders.decoders]
+        Qs = [Q.cpu().numpy() for Q in Qs]
+        return Qs, Ps, self.raw_model
     
     @staticmethod
     def _hudsons_fst(pop1: torch.Tensor, pop2: torch.Tensor) -> float:
