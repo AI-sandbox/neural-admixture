@@ -21,11 +21,7 @@ log = logging.getLogger(__name__)
 
 def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
         data: torch.Tensor, device: torch.device, num_gpus: int, hidden_size: int, 
-<<<<<<< HEAD
-        master: bool, V: np.ndarray, min_k: int, max_k: int, n_components: int) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
-=======
         master: bool, V: np.ndarray, min_k: int=None, max_k: int=None, n_components: int=None) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
->>>>>>> 37370ae782dd13e2779285771bb90fc820221316
         """
         Initializes P and Q matrices and trains a neural admixture model using GMM.
 
@@ -86,11 +82,6 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
                 P_init = torch.as_tensor(P, dtype=torch.float32, device=device).contiguous()
                 V = torch.as_tensor(V.T, dtype=torch.float32, device=device).contiguous()
             else:
-<<<<<<< HEAD
-                P_init = torch.empty((K, M), dtype=torch.float32, device=device)
-                V = torch.empty((M, K), dtype=torch.float32, device=device)
-            
-=======
                 if K is not None:
                     P_init = torch.empty((K, M), dtype=torch.float32, device=device)
                 else:
@@ -98,7 +89,6 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
                     P_init = torch.empty((total_K, M), dtype=torch.float32, device=device)
                 V = torch.empty((M, n_components), dtype=torch.float32, device=device)
                 
->>>>>>> 37370ae782dd13e2779285771bb90fc820221316
             if master:
                 log.info("    Broadcasting to all GPUs...")
             dist.broadcast(P_init, src=0)
@@ -135,10 +125,6 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
                     Q = np.ascontiguousarray(Qs[i].astype(np.float64))
                     logl = utils.loglikelihood(data, P, Q, K)
                     log.info(f"    Log-likelihood for K={K}: {logl:2f}.")
-<<<<<<< HEAD
-                
-=======
         del data
         del packed_data
->>>>>>> 37370ae782dd13e2779285771bb90fc820221316
         return Ps, Qs, model

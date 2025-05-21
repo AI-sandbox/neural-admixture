@@ -367,7 +367,7 @@ class NeuralAdmixture():
         self.raw_model.return_func = self.raw_model._return_infer
         batch_size_inference_Q = min(data.shape[0], 5000)
         self.model.eval()
-        Qs = [torch.tensor([], device=self.device) for k in self.ks_list]
+        Qs = [torch.tensor([], device=self.device) for _ in self.ks_list]
         with torch.inference_mode():
             dataloader = dataloader_admixture(data, batch_size_inference_Q, 1 if self.num_gpus >= 1 else 0, self.seed, self.generator, y, shuffle=False)
             for x_step in dataloader:
@@ -377,16 +377,8 @@ class NeuralAdmixture():
                     probs, _ = self.model(unpacked_step)
                 else:
                     probs, _ = self.model(x_step)
-<<<<<<< HEAD
-                for i, k in enumerate(self.ks_list):
-                    Qs[i]= torch.cat((Qs[i], probs[i]), dim=0)
-                    
-        if self.num_gpus>1:
-            torch.distributed.broadcast(Qs, src=0)
-=======
                 for i in range(len(self.ks_list)):
                     Qs[i]= torch.cat((Qs[i], probs[i]), dim=0)
->>>>>>> 37370ae782dd13e2779285771bb90fc820221316
 
         if self.master:
             log.info("")
@@ -446,11 +438,14 @@ class NeuralAdmixture():
             dataloader (Dataloader): Dataloader.
         """
         loss_acc = 0
-        for X, input_step, y in dataloader:
-            X = X.to(self.device, non_blocking=True)
-            input_step = input_step.to(self.device, non_blocking=True)
+        for x_step, y in dataloader:
+            if self.num_gpus>0:
+                unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
+                self.pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
+                loss = self._run_step_supervised(unpacked_step, y)
+            else:
+                loss = self._run_step_supervised(x_step, y)
             
-            loss = self._run_step_supervised(X, input_step, y)
             loss.backward()
             self.optimizer.step()
             self.raw_model.restrict_P()
@@ -526,16 +521,11 @@ class NeuralAdmixture():
         Details:
             - Computes and logs the log-likelihood of the model given the data.
         """
-<<<<<<< HEAD
-        Ps = [dec.weight.data.detach().cpu().numpy() for dec in self.raw_model.decoders.decoders]
-        Qs = [Q.cpu().numpy() for Q in Qs]
-=======
         if self.master:
             Ps = [dec.weight.data.detach().cpu().numpy() for dec in self.raw_model.decoders.decoders]
             Qs = [Q.cpu().numpy() for Q in Qs]
         else:
             Ps, Qs = [], []
->>>>>>> 37370ae782dd13e2779285771bb90fc820221316
         return Qs, Ps, self.raw_model
     
     @staticmethod

@@ -20,9 +20,11 @@ def main(argv: List[str]):
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
         num_gpus = 1
+        pin = False
     else:
         device = torch.device('cpu')
         num_gpus = 0
+        pin = True
         
     # LOAD ARGUMENTS:
     args = utils.parse_infer_args(argv)
@@ -33,7 +35,7 @@ def main(argv: List[str]):
     model_file_str = f'{args.save_dir}/{args.name}.pt'
     config_file_str = f'{args.save_dir}/{args.name}_config.json'
     seed = int(args.seed)
-    batch_size_inference_Q = min(data.shape[0], int(args.batch_size))
+    batch_size_inference_Q = int(args.batch_size)
     generator = torch.Generator().manual_seed(seed)
     
     # LOAD MODEL:

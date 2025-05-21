@@ -21,9 +21,9 @@ def parse_train_args(argv: List[str]):
                                            description='Rapid population clustering with autoencoders - training mode',
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
     
-    parser.add_argument('--epochs', required=False, type=int, default=25, help='Maximum number of epochs.')
-    parser.add_argument('--batch_size', required=False, default=800, type=int, help='Batch size.')
-    parser.add_argument('--learning_rate', required=False, default=25e-4, type=float, help='Learning rate.')
+    parser.add_argument('--epochs', required=False, type=int, default=250, help='Maximum number of epochs.')
+    parser.add_argument('--batch_size', required=False, default=512, type=int, help='Batch size.')
+    parser.add_argument('--learning_rate', required=False, default=20e-4, type=float, help='Learning rate.')
 
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
     parser.add_argument('--k', required=False, type=int, help='Number of populations/clusters.')
@@ -33,6 +33,9 @@ def parse_train_args(argv: List[str]):
     parser.add_argument('--save_dir', required=True, type=str, help='Save model in this directory')
     parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data')
     parser.add_argument('--name', required=True, type=str, help='Experiment/model name')
+    
+    parser.add_argument('--supervised_loss_weight', required=False, default=100, type=float, help='Weight given to the supervised loss')
+    parser.add_argument('--pops_path', required=False, default='', type=str, help='Path containing the main data populations')
     
     parser.add_argument('--n_components', required=False, type=int, default=8, help='Number of components to use for the SVD initialization.')
     
@@ -59,7 +62,7 @@ def parse_infer_args(argv: List[str]):
 
     return parser.parse_args(argv)
 
-def read_data(tr_file: str) -> np.ndarray:
+def read_data(tr_file: str, tr_pops_f: str=None) -> np.ndarray:
     """
     Reads SNP data from a file and applies imputation if specified..
 
@@ -72,8 +75,12 @@ def read_data(tr_file: str) -> np.ndarray:
     snp_reader = SNPReader()
     data = snp_reader.read_data(tr_file)
     log.info(f"    Data contains {data.shape[0]} samples and {data.shape[1]} SNPs.")
-   
-    return data, data.shape[0], data.shape[1]
+    if tr_pops_f:
+        with open(tr_pops_f, 'r') as fb:
+            pops = [p.strip() for p in fb.readlines()]
+    else:
+        pops = None
+    return data, pops, data.shape[0], data.shape[1]
 
 def write_outputs(Qs: np.ndarray, run_name: str, K: int, min_k: int, max_k: int, out_path: str, Ps: np.ndarray = None) -> None:
     """
@@ -107,10 +114,6 @@ def write_outputs(Qs: np.ndarray, run_name: str, K: int, min_k: int, max_k: int,
             if Ps is not None:
                 np.savetxt(out_path / f"{run_name}.{K}.P", Ps[i], delimiter=' ')
         log.info("    Q and P matrices saved for all K." if Ps is not None else "    Q matrices saved for all K.")
-<<<<<<< HEAD
-
-=======
->>>>>>> 37370ae782dd13e2779285771bb90fc820221316
 
 def ddp_setup(stage: str, rank: int, world_size: int) -> None:
     """

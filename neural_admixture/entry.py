@@ -86,8 +86,9 @@ def main():
         from .src import main
         
         data_path = arg_list[arg_list.index('--data_path') + 1]
+        pops_path = arg_list[arg_list.index('--pops_path') + 1] if '--pops_path' in arg_list else None
         n_components = int(arg_list[arg_list.index('--n_components') + 1]) if '--n_components' in arg_list else 8
-        data, N, M = utils.read_data(data_path)
+        data, pops, N, M = utils.read_data(data_path, pops_path)
         log.info("")
         log.info("    Running SVD...")
         log.info("")
