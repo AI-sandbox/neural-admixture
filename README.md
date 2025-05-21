@@ -46,7 +46,7 @@ The package can be easily installed in at most a few minutes using `pip` (make s
 ## Usage 
 ### Running Neural ADMIXTURE
 
-To train a model from scratch, simply invoke the following commands from the root directory of the project. For more info about all the arguments, please run `neural-admixture train --help`. If training a single-head version of the network suffices, please use the flag `--k` instead of `--min_k` and `--max_k`. Note that only BED is supported as of now. 
+To train a model from scratch, simply invoke the following commands from the root directory of the project. For more info about all the arguments, please run `neural-admixture train --help`. If training a single-head version of the network suffices, please use the flag `--k` instead of `--min_k` and `--max_k`. Note that BED, PGEN and VCF are supported as of now. 
 
 For unsupervised Neural ADMIXTURE (single-head):
 
@@ -109,7 +109,7 @@ For this command to work, files `./outputs/nadm_test.pt` and `./outputs/nadm_tes
 
 The supervised version of the algorithm can be used when all samples have a corresponding population label. This can be very benificial, especially when dealing with large imbalances in the data (_e.g_ data contains 1K samples from Pop1 and 50 samples from Pop2).
 
-In order to use the supervised mode, the flag `--supervised` must be passed when invoking the software, along with a `--populations_path` pointing to the file where the ancestries are defined. The latter file must be a single-column, headerless, plain text file where row `i` denotes the ancestry for the `i`-th sample in the data. The character `-` must be used for samples whose ancestry is missing/unknown.
+In order to use the supervised mode, the flag `--supervised` must be passed when invoking the software, along with a `--pops_path` pointing to the file where the ancestries are defined. The latter file must be a single-column, headerless, plain text file where row `i` denotes the ancestry for the `i`-th sample in the data. The character `-` must be used for samples whose ancestry is missing/unknown.
 
 The supervised mode works by adding a scaled classification loss to the bottleneck of the algorithm (Equation 5 of the paper). The scaling factor can have a big impact on the performance. If it is too small, then the supervised loss will have little impact on the training, so results would be similar to an unsupervised run. On the other hand, if it is too large, then the supervision will dominate training, making the network overconfident in its predictions: essentially, one would get only binary assignments. The default value of the scaling factor is _η=0.05_, and can be controlled using the parameter `--supervised_loss_weight`.
 
