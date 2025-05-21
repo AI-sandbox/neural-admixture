@@ -123,6 +123,7 @@ Moreover, note that the initialization method chosen will have no effect, as the
 - `epochs`: maximum number of times the whole training dataset is used to update the weights. Defaults to 250. 
 - `learning_rate`: dictates how large an update to the weights will be. If you find the loss function oscillating, try setting a lower value. If convergence is slow, try setting a higher value. Defaults to 25e-4.
 - `seed`: RNG seed for replication purposes. Defaults to 42.
+- `num_gpus`: number of GPUs to use during training. Set to 0 for CPU-only execution. Defaults to 0.
 
 ## Experiments replication
 
