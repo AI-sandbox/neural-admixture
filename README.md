@@ -46,7 +46,7 @@ The package can be easily installed in at most a few minutes using `pip` (make s
 ## Usage 
 ### Running Neural ADMIXTURE
 
-To train a model from scratch, simply invoke the following commands from the root directory of the project. For more info about all the arguments, please run `neural-admixture train --help`. If training a single-head version of the network suffices, please use the flag `--k` instead of `--min_k` and `--max_k`. Note that only BED is supported as of now. 
+To train a model from scratch, simply invoke the following commands from the root directory of the project. For more info about all the arguments, please run `neural-admixture train --help`. If training a single-head version of the network suffices, please use the flag `--k` instead of `--min_k` and `--max_k`. Note that BED, PGEN and VCF are supported as of now. 
 
 For unsupervised Neural ADMIXTURE (single-head):
 
