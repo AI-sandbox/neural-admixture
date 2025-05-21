@@ -21,7 +21,7 @@ The successful usage of this package requires a computer with enough RAM to be a
 
 ### Software requirements
 
-The package has been tested on both Linux (CentOS 7.9.2009, Ubuntu 18.04.5 LTS) and MacOS (BigSur 11.2.3, Intel and Monterey 12.3.1, M1). It is highly recommended to use GPUs for optimal performance - make sure CUDA drivers are properly installed.
+It is highly recommended to use GPUs for optimal performance - make sure CUDA drivers are properly installed.
 
 We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `conda`), and then install the package `neural-admixture` there. As an example, for `virtualenv`, one should launch the following commands:
 
@@ -79,7 +79,6 @@ Several files will be output to the `SAVE_PATH` directory (the `name` parameter 
 - A `.P` file, similar to ADMIXTURE.
 - A `.Q` file, similar to ADMIXTURE.
 - A `.pt` file, containing the weights of the trained network.
-- A `_pca.pt` file, containing the PCA weights of the trained network.
 - A `.json` file, with the configuration of the network.
 
 The last three files are required to run posterior inference using the network, so be aware of not deleting them accidentally! Logs are printed to the `stdout` channel by default. If you want to save them to a file, you can use the command `tee` along with a pipe:
@@ -87,15 +86,6 @@ The last three files are required to run posterior inference using the network, 
 ```console
 $ neural-admixture train --k 8 ... | tee run.log
 ```
-
-### Initialization method
-
-As described in the article, Neural ADMIXTURE's decoder(s) can be initialized using several methods, which will be indicated by the required `initialization` argument. The best-performing initialization method depends, mainly, on the structure of the data. The main options are:
-
-- `kmeans`: initialize using PCK-Means (Algorithm 1 in the paper).
-- `gmm`: initialize using GaussianMixture. Default.
-
-The `supervised` initialization method is used by default (and can only be used) when using supervised mode.
 
 ### Inference mode (projective analysis)
 
@@ -123,16 +113,10 @@ Moreover, note that the initialization method chosen will have no effect, as the
 
 ## Other options
 - `batch_size`: number of samples used at every update. If you have memory issues, try setting a lower batch size. Defaults to 800.
-- `pca_components`: dimension of the PCA projection for the PC-KMeans and PCArchetypal initializations. Defaults to 8.
+- `n_components`: dimension of the PCA projection for SVD. Defaults to 8.
 - `epochs`: maximum number of times the whole training dataset is used to update the weights. Defaults to 250. 
 - `learning_rate`: dictates how large an update to the weights will be. If you find the loss function oscillating, try setting a lower value. If convergence is slow, try setting a higher value. Defaults to 25e-4.
 - `seed`: RNG seed for replication purposes. Defaults to 42.
-
-## Using Plink2 binary files (.pgen)
-
-If the data format you will be working on is _Plink2 Binary Files (.pgen, .psam, .pvar)_ then you also need to install the package `pgenlib`. This package is not available in PyPi, but is included in the [plink repository](https://github.com/chrchang/plink-ng/tree/master/2.0/Python). Installation instructions can be found in the [corresponding `README.md` file](https://github.com/chrchang/plink-ng/blob/master/2.0/Python/ReadMe.md). While you will need to clone the whole repository, you can remove it after installing the package, unless you plan to work with it.
-
-**UPDATE**: `pgenlib` is now available on PyPi and can be installed via `pip`.
 
 ## Experiments replication
 
