@@ -51,7 +51,13 @@ To train a model from scratch, simply invoke the following commands from the roo
 For unsupervised Neural ADMIXTURE (single-head):
 
 ```console
-$ neural-admixture train --k K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_file INIT_FILE
+$ neural-admixture train --k K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH
+````
+
+For unsupervised Neural ADMIXTURE (multi-head):
+
+```console
+$ neural-admixture train --min_k K_MIN --max_k K_MAX --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH
 ````
 
 For supervised Neural ADMIXTURE:
