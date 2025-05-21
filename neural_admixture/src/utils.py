@@ -107,7 +107,10 @@ def write_outputs(Qs: np.ndarray, run_name: str, K: int, min_k: int, max_k: int,
             if Ps is not None:
                 np.savetxt(out_path / f"{run_name}.{K}.P", Ps[i], delimiter=' ')
         log.info("    Q and P matrices saved for all K." if Ps is not None else "    Q matrices saved for all K.")
+<<<<<<< HEAD
 
+=======
+>>>>>>> 37370ae782dd13e2779285771bb90fc820221316
 
 def ddp_setup(stage: str, rank: int, world_size: int) -> None:
     """

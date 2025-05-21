@@ -21,7 +21,7 @@ The successful usage of this package requires a computer with enough RAM to be a
 
 ### Software requirements
 
-The package has been tested on both Linux (CentOS 7.9.2009, Ubuntu 18.04.5 LTS) and MacOS (BigSur 11.2.3, Intel and Monterey 12.3.1, M1). It is highly recommended to use GPUs for optimal performance - make sure CUDA drivers are properly installed.
+It is highly recommended to use GPUs for optimal performance - make sure CUDA drivers are properly installed.
 
 We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `conda`), and then install the package `neural-admixture` there. As an example, for `virtualenv`, one should launch the following commands:
 
@@ -46,12 +46,18 @@ The package can be easily installed in at most a few minutes using `pip` (make s
 ## Usage 
 ### Running Neural ADMIXTURE
 
-To train a model from scratch, simply invoke the following commands from the root directory of the project. For more info about all the arguments, please run `neural-admixture train --help`. If training a single-head version of the network suffices, please use the flag `--k` instead of `--min_k` and `--max_k`. Note that VCF, BED, PGEN and HDF5 files are supported as of now. 
+To train a model from scratch, simply invoke the following commands from the root directory of the project. For more info about all the arguments, please run `neural-admixture train --help`. If training a single-head version of the network suffices, please use the flag `--k` instead of `--min_k` and `--max_k`. Note that BED, PGEN and VCF are supported as of now. 
 
 For unsupervised Neural ADMIXTURE (single-head):
 
 ```console
-$ neural-admixture train --k K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --init_file INIT_FILE
+$ neural-admixture train --k K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH
+````
+
+For unsupervised Neural ADMIXTURE (multi-head):
+
+```console
+$ neural-admixture train --min_k K_MIN --max_k K_MAX --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH
 ````
 
 For supervised Neural ADMIXTURE:
@@ -79,7 +85,6 @@ Several files will be output to the `SAVE_PATH` directory (the `name` parameter 
 - A `.P` file, similar to ADMIXTURE.
 - A `.Q` file, similar to ADMIXTURE.
 - A `.pt` file, containing the weights of the trained network.
-- A `_pca.pt` file, containing the PCA weights of the trained network.
 - A `.json` file, with the configuration of the network.
 
 The last three files are required to run posterior inference using the network, so be aware of not deleting them accidentally! Logs are printed to the `stdout` channel by default. If you want to save them to a file, you can use the command `tee` along with a pipe:
@@ -88,23 +93,14 @@ The last three files are required to run posterior inference using the network, 
 $ neural-admixture train --k 8 ... | tee run.log
 ```
 
-### Initialization method
-
-As described in the article, Neural ADMIXTURE's decoder(s) can be initialized using several methods, which will be indicated by the required `initialization` argument. The best-performing initialization method depends, mainly, on the structure of the data. The main options are:
-
-- `kmeans`: initialize using PCK-Means (Algorithm 1 in the paper).
-- `gmm`: initialize using GaussianMixture. Default.
-
-The `supervised` initialization method is used by default (and can only be used) when using supervised mode.
-
 ### Inference mode (projective analysis)
 
 ADMIXTURE allows reusing computations in the _projective analysis_ mode, in which the `P` (`F`, frequencies) matrix is fixed to an already known result and only the assignments are computed. Due to the nature of our algorithm, assignments can be computed for unseen data by simply feeding the data through the encoder. This mode can be run by typing `infer` instead of `train` right after the `neural-admixture` call.
 
-For example, assuming we have a trained Neural ADMIXTURE (named `nadm_test`) in the path `./outputs`, one could run inference on unseen data (`./data/unseen_data.vcf`) via the following command:
+For example, assuming we have a trained Neural ADMIXTURE (named `nadm_test`) in the path `./outputs`, one could run inference on unseen data (`./data/unseen_data.bed`) via the following command:
 
 ```console
-$ neural-admixture infer --name nadm_test --save_dir ./outputs --out_name unseen_nadm_test --data_path ./data/unseen_data.vcf
+$ neural-admixture infer --name nadm_test --save_dir ./outputs --out_name unseen_nadm_test --data_path ./data/unseen_data.bed
 ```
 
 For this command to work, files `./outputs/nadm_test.pt` and `./outputs/nadm_test_config.json`, which are training outputs, must exist. In this case, only a `.Q` will be created, which will contain the assignments for this data (the parameter of the flag `out_name` will be used to generate the output file name). This file will be written in the `--save_dir` directory (in this case, `./outputs`).
@@ -123,16 +119,11 @@ Moreover, note that the initialization method chosen will have no effect, as the
 
 ## Other options
 - `batch_size`: number of samples used at every update. If you have memory issues, try setting a lower batch size. Defaults to 800.
-- `pca_components`: dimension of the PCA projection for the PC-KMeans and PCArchetypal initializations. Defaults to 8.
+- `n_components`: dimension of the PCA projection for SVD. Defaults to 8.
 - `epochs`: maximum number of times the whole training dataset is used to update the weights. Defaults to 250. 
 - `learning_rate`: dictates how large an update to the weights will be. If you find the loss function oscillating, try setting a lower value. If convergence is slow, try setting a higher value. Defaults to 25e-4.
 - `seed`: RNG seed for replication purposes. Defaults to 42.
-
-## Using Plink2 binary files (.pgen)
-
-If the data format you will be working on is _Plink2 Binary Files (.pgen, .psam, .pvar)_ then you also need to install the package `pgenlib`. This package is not available in PyPi, but is included in the [plink repository](https://github.com/chrchang/plink-ng/tree/master/2.0/Python). Installation instructions can be found in the [corresponding `README.md` file](https://github.com/chrchang/plink-ng/blob/master/2.0/Python/ReadMe.md). While you will need to clone the whole repository, you can remove it after installing the package, unless you plan to work with it.
-
-**UPDATE**: `pgenlib` is now available on PyPi and can be installed via `pip`.
+- `num_gpus`: number of GPUs to use during training. Set to 0 for CPU-only execution. Defaults to 0.
 
 ## Experiments replication
 

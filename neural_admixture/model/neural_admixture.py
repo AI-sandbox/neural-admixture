@@ -377,11 +377,16 @@ class NeuralAdmixture():
                     probs, _ = self.model(unpacked_step)
                 else:
                     probs, _ = self.model(x_step)
+<<<<<<< HEAD
                 for i, k in enumerate(self.ks_list):
                     Qs[i]= torch.cat((Qs[i], probs[i]), dim=0)
                     
         if self.num_gpus>1:
             torch.distributed.broadcast(Qs, src=0)
+=======
+                for i in range(len(self.ks_list)):
+                    Qs[i]= torch.cat((Qs[i], probs[i]), dim=0)
+>>>>>>> 37370ae782dd13e2779285771bb90fc820221316
 
         if self.master:
             log.info("")
@@ -521,8 +526,16 @@ class NeuralAdmixture():
         Details:
             - Computes and logs the log-likelihood of the model given the data.
         """
+<<<<<<< HEAD
         Ps = [dec.weight.data.detach().cpu().numpy() for dec in self.raw_model.decoders.decoders]
         Qs = [Q.cpu().numpy() for Q in Qs]
+=======
+        if self.master:
+            Ps = [dec.weight.data.detach().cpu().numpy() for dec in self.raw_model.decoders.decoders]
+            Qs = [Q.cpu().numpy() for Q in Qs]
+        else:
+            Ps, Qs = [], []
+>>>>>>> 37370ae782dd13e2779285771bb90fc820221316
         return Qs, Ps, self.raw_model
     
     @staticmethod
