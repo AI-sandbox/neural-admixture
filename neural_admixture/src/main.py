@@ -40,7 +40,7 @@ def fit_model(args: argparse.Namespace, data: torch.Tensor, device: torch.device
     if master:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
         save_path = f'{save_dir}/{name}.pt'
-        state_dict = {key: value for key, value in model.state_dict().items() if key != 'P'}
+        state_dict = {key: value for key, value in model.state_dict().items() if not key.startswith('decoders')}
         torch.save(state_dict, save_path)
         model.save_config(name, save_dir)
         utils.write_outputs(Qs, name, K, min_k, max_k, save_dir, Ps)

@@ -139,7 +139,8 @@ class Q_P(torch.nn.Module):
             torch.nn.Linear(self.num_features, self.hidden_size, bias=True),
             self.encoder_activation)
         self.multihead_encoder = NeuralEncoder(self.hidden_size, ks=self.ks_list)
-        self.decoders = NeuralDecoder(self.num_features, P, ks=self.ks_list)
+        if P is not None:
+            self.decoders = NeuralDecoder(self.num_features, P, ks=self.ks_list)
         self.softmax = torch.nn.Softmax(dim=1)
         
         if is_train:
@@ -398,7 +399,7 @@ class NeuralAdmixture():
             dataloader (Dataloader): Dataloader
         """
         loss_acc = 0
-        for x_step in dataloader:
+        for x_step, _ in dataloader:
             if self.num_gpus>0:
                 unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
                 self.pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)

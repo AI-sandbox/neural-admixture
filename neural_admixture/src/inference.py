@@ -51,7 +51,7 @@ def main(argv: List[str]):
     log.info("    Model config file loaded. Loading weights...")
     state_dict = torch.load(model_file_str, map_location=device, weights_only=True)
     V = state_dict.get("V")
-    model = Q_P(int(config['hidden_size']), int(config['num_features']), int(config['k']), V=V, is_train=False)
+    model = Q_P(int(config['hidden_size']), int(config['num_features']), ks_list=config['ks'], V=V, is_train=False)
     model.load_state_dict(state_dict)
     model.to(device)
     log.info("")
@@ -65,17 +65,28 @@ def main(argv: List[str]):
     
     # INFERENCE:
     model.eval()
-    Q = torch.tensor([], device=device)
+    Qs = [torch.tensor([], device=device) for _ in config['ks']]
     log.info("    Running inference...")
     with torch.inference_mode():
         dataloader = dataloader_admixture(data, batch_size_inference_Q, num_gpus, seed, generator, y=None,  shuffle=False)
-        for x_step in dataloader:
+        for x_step, _ in dataloader:
             probs, _ = model(x_step)
-            Q = torch.cat((Q, probs), dim=0)
+            for i, k in enumerate(config['ks']):
+                Qs[i]= torch.cat((Qs[i], probs[i]), dim=0)
     log.info("    Inference run successfully! Writing outputs...!")
     
     # WRITE OUTPUTS:
-    utils.write_outputs(Q.cpu().numpy(), out_name, int(config['k']), args.save_dir)
+    K = config['ks'][0]
+    if len(config['ks'])>1:
+        K = config['ks'][0]
+        min_k = None
+        max_k = None
+    else:
+        K = None
+        min_k = config['ks'][0]
+        max_k = config['ks'][-1]
+        
+    utils.write_outputs(Qs.cpu().numpy(), out_name, K, min_k, max_k, args.save_dir)
     
     t1 = time.time()
     log.info("")
