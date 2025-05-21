@@ -245,7 +245,7 @@ class NeuralAdmixture():
         supervised_loss_weight (Optional[float]): Weight of the supervised loss component (if using supervised training). Defaults to None.
     """
     def __init__(self, k: int, epochs: int, batch_size: int, learning_rate: float, device: torch.device, seed: int, num_gpus: int,
-                master: bool, pack2bit, min_k: int, max_k: int, supervised_loss_weight: Optional[float]=None):
+                master: bool, pack2bit, min_k: int, max_k: int, supervised_loss_weight: Optional[float]=100):
         """
         Initializes the NeuralAdmixture class with training parameters and settings.
 
@@ -320,7 +320,7 @@ class NeuralAdmixture():
             self.raw_model = self.base_model
                 
     def launch_training(self, P: torch.Tensor, data: torch.Tensor, hidden_size:int, num_features:int, 
-                        V: torch.Tensor, M: int, N: int, y: Optional[torch.Tensor]=None) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+                        V: torch.Tensor, M: int, N: int, pops: Optional[torch.Tensor]=None) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Launches the training process, which includes two distinct phases and a final inference step to compute Q.
 
@@ -347,8 +347,8 @@ class NeuralAdmixture():
         torch.set_float32_matmul_precision('medium')
         torch.set_flush_denormal(True)
         self.initialize_model(P, hidden_size, num_features, V, self.ks_list)
-        if y is None:
-            y = torch.zeros(data.size(0), device='cpu')
+        if pops is None:
+            pops = torch.zeros(data.size(0), device=self.device)
             run_epoch = self._run_epoch
         else:
             run_epoch = self._run_epoch_supervised
@@ -359,7 +359,7 @@ class NeuralAdmixture():
             log.info("    Starting training...")
             log.info("")
         self.optimizer = self.raw_model.create_custom_adam(self.lr)
-        dataloader = dataloader_admixture(data, self.batch_size, self.num_gpus, self.seed, self.generator, y, shuffle=True)
+        dataloader = dataloader_admixture(data, self.batch_size, self.num_gpus, self.seed, self.generator, pops, shuffle=True)
         for epoch in tqdm(range(self.epochs), desc="Epochs", file=sys.stderr):
             run_epoch(epoch, dataloader)
 
@@ -369,8 +369,8 @@ class NeuralAdmixture():
         self.model.eval()
         Qs = [torch.tensor([], device=self.device) for _ in self.ks_list]
         with torch.inference_mode():
-            dataloader = dataloader_admixture(data, batch_size_inference_Q, 1 if self.num_gpus >= 1 else 0, self.seed, self.generator, y, shuffle=False)
-            for x_step in dataloader:
+            dataloader = dataloader_admixture(data, batch_size_inference_Q, 1 if self.num_gpus >= 1 else 0, self.seed, self.generator, pops, shuffle=False)
+            for x_step, _ in dataloader:
                 if self.num_gpus>0:
                     unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
                     self.pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
@@ -438,13 +438,13 @@ class NeuralAdmixture():
             dataloader (Dataloader): Dataloader.
         """
         loss_acc = 0
-        for x_step, y in dataloader:
+        for x_step, pops_step in dataloader:
             if self.num_gpus>0:
                 unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
                 self.pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
-                loss = self._run_step_supervised(unpacked_step, y)
+                loss = self._run_step_supervised(unpacked_step, pops_step)
             else:
-                loss = self._run_step_supervised(x_step, y)
+                loss = self._run_step_supervised(x_step, pops_step)
             
             loss.backward()
             self.optimizer.step()
@@ -455,7 +455,7 @@ class NeuralAdmixture():
         if epoch%2==0:
             log.info(f"            Loss in epoch {epoch:3d} on device {self.device} is {int(loss_acc):,.0f}")
             
-    def _run_step_supervised(self, X: torch.Tensor,  input_step: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def _run_step_supervised(self, x_step: torch.Tensor, pops_step: torch.Tensor) -> torch.Tensor:
         """
         Executes one training step.
 
@@ -466,10 +466,9 @@ class NeuralAdmixture():
             torch.Tensor: Computed loss for the batch.
         """
         self.optimizer.zero_grad(set_to_none=True)
-        recs, probs = self.model(input_step)
-        loss = self.loss_function(recs, X)
-        mask = y > -1
-        loss += self.supervised_loss_weight*self.loss_function_supervised(probs[mask], y[mask])
+        out, x_step = self.model(x_step)
+        loss = self.loss_function(out[0][0], x_step)
+        loss += self.supervised_loss_weight*self.loss_function_supervised(out[1][0], pops_step)
         return loss
     
     def display_divergences(self, k) -> None:

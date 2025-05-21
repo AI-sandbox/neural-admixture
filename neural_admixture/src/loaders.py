@@ -6,7 +6,7 @@ from typing import Tuple
 
 # DATALOADER:
 def dataloader_admixture(X: torch.Tensor, batch_size: int, num_gpus: int, seed: int, 
-                generator: torch.Generator, y: torch.Tensor, shuffle: bool):
+                generator: torch.Generator, pops: torch.Tensor, shuffle: bool):
     """
     Creates a DataLoader with batch sampler or distributed sampler for the phase 2.
 
@@ -22,7 +22,7 @@ def dataloader_admixture(X: torch.Tensor, batch_size: int, num_gpus: int, seed: 
     Returns:
     - Tuple[DataLoader, Union[BatchSampler, DistributedSampler]]: DataLoader object and the used sampler.
     """
-    dataset = Dataset_admixture(X)
+    dataset = Dataset_admixture(X, pops)
     if num_gpus > 1:
         sampler = DistributedSampler(dataset, shuffle=True, seed=seed)
     else:
@@ -43,13 +43,14 @@ class Dataset_admixture(Dataset):
             X (torch.Tensor): The main data tensor.
             input (torch.Tensor): The input tensor associated with the data.
     """
-    def __init__(self, X: torch.Tensor):
+    def __init__(self, X: torch.Tensor, pops: torch.Tensor):
         """
         Args:
             X (torch.Tensor): The main data tensor.
             input (torch.Tensor): The input tensor associated with the data.
         """
         self.X = X
+        self.pops = pops
         
     def __len__(self) -> int:
         """
@@ -67,4 +68,5 @@ class Dataset_admixture(Dataset):
             Tuple[torch.Tensor, torch.Tensor]: A tuple containing `batch_X` and `batch_input` tensors.
         """
         batch_X = self.X[idx]
-        return batch_X
+        batch_pops = self.pops[idx]
+        return batch_X, batch_pops

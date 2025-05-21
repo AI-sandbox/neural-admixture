@@ -3,6 +3,8 @@ import sys
 import os
 import torch
 import torch.multiprocessing as mp
+import platform
+import sys
 
 from ._version import __version__
 
@@ -57,7 +59,6 @@ def main():
         num_cpus = 1
         num_threads = 1
     
-    #str(num_threads)
     os.environ["MKL_NUM_THREADS"] = "1"
     os.environ["MKL_MAX_THREADS"] = "1"
     os.environ["OMP_NUM_THREADS"] = "1"
@@ -68,6 +69,23 @@ def main():
     os.environ["OPENBLAS_MAX_THREADS"] = "1"
     
     log.info(f"    There are {num_cpus} CPU's available for this execution. Hence, using {num_threads} threads.")
+    
+    #CONTROL OS:
+    system = platform.system()
+    if system == "Linux":
+        log.info("    Operating system is Linux!")
+        os.environ["CC"] = "gcc"
+        os.environ["CXX"] = "g++"
+    elif system == "Darwin":
+        log.info("    Operating system is Darwin (Mac OS)!")
+        os.environ["CC"] = "clang"
+        os.environ["CXX"] = "clang++"
+    elif system == "Windows":
+        log.info("    Operating system is Windows!")
+        pass
+    else:
+        log.info(f"System not recognized: {system}")
+        sys.exit(1)
 
     # CONTROL NUMBER OF DEVICES:
     num_gpus = 0
@@ -97,10 +115,10 @@ def main():
         
         if num_gpus>1:
             log.info("    Entering multi-GPU training...")
-            mp.spawn(main.main, args=(arg_list[2:], num_gpus, data, V), nprocs=num_gpus)
+            mp.spawn(main.main, args=(arg_list[2:], num_gpus, data, V, pops), nprocs=num_gpus)
         else:
             log.info("    Entering single-GPU or CPU training...")
-            sys.exit(main.main(0, arg_list[2:], num_gpus, data, V))
+            sys.exit(main.main(0, arg_list[2:], num_gpus, data, V, pops))
     
     elif sys.argv[1]=='infer':
         from .src import inference

@@ -17,7 +17,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
 def fit_model(args: argparse.Namespace, data: torch.Tensor, device: torch.device, num_gpus: int,
-            master: bool, V: np.ndarray) -> None:
+            master: bool, V: np.ndarray, pops: np.ndarray) -> None:
     """
     Wrapper function to start training
     """
@@ -35,7 +35,7 @@ def fit_model(args: argparse.Namespace, data: torch.Tensor, device: torch.device
         max_k = int(args.max_k)
         K = None
 
-    Ps, Qs, model = train(epochs, batch_size, learning_rate, K, seed, data, device, num_gpus, hidden_size, master, V, min_k, max_k, n_components)
+    Ps, Qs, model = train(epochs, batch_size, learning_rate, K, seed, data, device, num_gpus, hidden_size, master, V, pops, min_k, max_k, n_components)
     
     if master:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
@@ -81,7 +81,7 @@ def perform_cross_validation(args: argparse.Namespace, trX: da.core.Array, devic
     utils.save_cv_error_plot(cv_errs_reduced, args.save_dir)
 """
 
-def main(rank: int, argv: List[str], num_gpus: int, data: torch.Tensor, V: np.ndarray):
+def main(rank: int, argv: List[str], num_gpus: int, data: torch.Tensor, V: np.ndarray, pops: np.ndarray):
     """
     Training entry point
     """
@@ -124,7 +124,7 @@ def main(rank: int, argv: List[str], num_gpus: int, data: torch.Tensor, V: np.nd
         #if args.cv is not None:
         #    perform_cross_validation(args, trX, device, num_gpus, master)   
         
-        fit_model(args, data, device, num_gpus, master, V)
+        fit_model(args, data, device, num_gpus, master, V, pops)
         
         if master:
             t1 = time.time()

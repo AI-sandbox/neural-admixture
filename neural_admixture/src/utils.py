@@ -22,7 +22,7 @@ def parse_train_args(argv: List[str]):
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
     
     parser.add_argument('--epochs', required=False, type=int, default=250, help='Maximum number of epochs.')
-    parser.add_argument('--batch_size', required=False, default=512, type=int, help='Batch size.')
+    parser.add_argument('--batch_size', required=False, default=800, type=int, help='Batch size.')
     parser.add_argument('--learning_rate', required=False, default=20e-4, type=float, help='Learning rate.')
 
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
@@ -76,6 +76,7 @@ def read_data(tr_file: str, tr_pops_f: str=None) -> np.ndarray:
     data = snp_reader.read_data(tr_file)
     log.info(f"    Data contains {data.shape[0]} samples and {data.shape[1]} SNPs.")
     if tr_pops_f:
+        log.info("    Population file provided!")
         with open(tr_pops_f, 'r') as fb:
             pops = [p.strip() for p in fb.readlines()]
     else:
