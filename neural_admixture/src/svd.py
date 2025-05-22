@@ -13,16 +13,40 @@ log = logging.getLogger(__name__)
 # High-level randomized SVD function
 # -----------------------------------------------------------------------------
 
-def randomized_svd_uint8_input(A_uint8, N, M, k=8, oversampling=10, power_iterations=0):
+def svd_flip(V, U):
+    """
+    Adjust signs of V rows based on dominant signs in U columns to ensure consistent SVD output.
+
+    Parameters:
+    -----------
+    V : np.ndarray
+        Matrix (e.g., V or Vt) to flip signs on rows.
+    U : np.ndarray
+        Left singular vectors matrix to determine sign direction.
+
+    Returns:
+    --------
+    np.ndarray
+        Sign-corrected version of V.
+    """
+    k_components = U.shape[1]
+    max_abs_val_row_indices = np.argmax(np.abs(U), axis=0)
+    col_selector = np.arange(k_components)
+    elements_for_sign = U[max_abs_val_row_indices, col_selector]
+    signs = np.sign(elements_for_sign)
+    return V * signs[:, np.newaxis]
+
+def RSVD(A_uint8, N, M, k=8, seed=42, oversampling=10, power_iterations=0):
     """
     Randomized SVD para matrices uint8 de forma (n_features, m_samples).
     Retorna Vt_k de forma (k, m_samples).
     """
+    rng = np.random.default_rng(seed)
     k_prime = min(N, M, k + oversampling)
 
     total_start_time = time.time()
     log.info("    1) Generando Ω y Y = A @ Ω...")
-    Omega = np.random.randn(M, k_prime).astype(np.float32)
+    Omega = rng.standard_normal(size=(M, k_prime), dtype=np.float32)
     Y = rsvd.multiply_A_omega(A_uint8, Omega)
     log.info(f"       Y.shape={Y.shape}, time={time.time() - total_start_time:.4f}s")
 
@@ -49,8 +73,10 @@ def randomized_svd_uint8_input(A_uint8, N, M, k=8, oversampling=10, power_iterat
 
     log.info("    4) SVD de B...")
     svd_start = time.time()
-    _, _, Vt = np.linalg.svd(B, full_matrices=False)
+    Ut, _, Vt = np.linalg.svd(B, full_matrices=False)
     log.info(f"       SVD time={time.time() - svd_start:.4f}s")
+    
+    Vt = svd_flip(Vt, Ut)
     
     log.info("")
     log.info(f"    Total time SVD: {time.time() - total_start_time:.4f}s")

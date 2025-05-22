@@ -9,37 +9,36 @@ import sys
 from ._version import __version__
 
 from .src import utils
-from .src.svd import randomized_svd_uint8_input
+from .src.svd import RSVD
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
+from colorama import init, Fore, Style
+
 def print_neural_admixture_banner(version: str="2.0") -> None:
     """
-    Display the Neural Admixture banner with version and author information.
-
-    Args:
-        version (str): Version number to display. Defaults to "2.0".
-
-    Returns:
-        None
+    Display the Neural Admixture banner with version and author information in color.
     """
-    banner = r"""
+    init(autoreset=True)
+    
+    banner = f"""
+{Fore.CYAN}
     _   _                      _       ___  ____  __  __ _______   _________ _    _ _____  ______ 
    | \ | |                    | |     / _ \|  _ \|  \/  |_   _\ \ / /__   __| |  | |  __ \|  ____|
    |  \| | ___ _   _ _ __ __ _| |    / /_\ | | | | \  / | | |  \ V /   | |  | |  | | |__) | |__   
    | . ` |/ _ \ | | | '__/ _` | |    |  _  | | | | |\/| | | |   > <    | |  | |  | |  _  /|  __|  
    | |\  |  __/ |_| | | | (_| | |    | | | | |_| | |  | |_| |_ / . \   | |  | |__| | | \ \| |____ 
    |_| \_|\___|\__,_|_|  \__,_|_|    \_| |_/____/|_|  |_|_____/_/ \_\  |_|   \____/|_|  \_\______|
-                                                                                          
+{Style.RESET_ALL}
     """
     
     info = f"""
-    Version: {version}
-    Authors: Joan Saurina Ricós, Albert Dominguez Mantes, 
-            Daniel Mas Montserrat and Alexander G. Ioannidis.
-    
-    """
+        {Fore.CYAN}                             Version: {version}{Style.RESET_ALL}
+        {Fore.CYAN}            Authors: Joan Saurina Ricós, Albert Dominguez Mantes, 
+                        Daniel Mas Montserrat and Alexander G. Ioannidis.{Style.RESET_ALL}
+        {Fore.CYAN}            Help: https://github.com/AI-sandbox/neural-admixture{Style.RESET_ALL}
+            """
     
     log.info("\n" + banner + info)
 
@@ -99,6 +98,10 @@ def main():
         log.warning(f"    Requested {num_gpus} GPUs, but only {max_devices} are available. Using {max_devices} GPUs.")
         num_gpus = max_devices
     
+    # CONTROL SEED:
+    seed = int(arg_list[arg_list.index('--seed') + 1]) if '--seed' in arg_list else 42
+    utils.set_seed(seed)
+    
     # BEGIN TRAIN OF INFERENCE:
     if sys.argv[1]=='train':
         from .src import main
@@ -110,7 +113,7 @@ def main():
         log.info("")
         log.info("    Running SVD...")
         log.info("")
-        V = randomized_svd_uint8_input(data, N, M, n_components)
+        V = RSVD(data, N, M, n_components, seed)
         data = torch.as_tensor(data, dtype=torch.uint8).share_memory_()
         
         if num_gpus>1:

@@ -23,9 +23,7 @@ def fit_model(args: argparse.Namespace, data: torch.Tensor, device: torch.device
     """
     (epochs, batch_size, learning_rate, save_dir, hidden_size, name, seed, n_components) = (int(args.epochs), int(args.batch_size), float(args.learning_rate), args.save_dir, 
                                                                                         int(args.hidden_size), args.name, int(args.seed), int(args.n_components))
-        
-    utils.set_seed(seed)
-    
+            
     if args.k is not None:
         K = int(args.k)
         min_k = None
