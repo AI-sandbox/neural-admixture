@@ -60,7 +60,7 @@ def main(argv: List[str]):
     
     # LOAD DATA:
     t0 = time.time()
-    data, N, M = utils.read_data(data_file_str)
+    data, *_ = utils.read_data(data_file_str)
     data = torch.as_tensor(data, dtype=torch.uint8, device=device)
     
     # INFERENCE:
@@ -68,16 +68,17 @@ def main(argv: List[str]):
     Qs = [torch.tensor([], device=device) for _ in config['ks']]
     log.info("    Running inference...")
     with torch.inference_mode():
-        dataloader = dataloader_admixture(data, batch_size_inference_Q, num_gpus, seed, generator, y=None,  shuffle=False)
+        pops = torch.zeros(data.size(0), device=device)
+        dataloader = dataloader_admixture(data, batch_size_inference_Q, num_gpus, seed, generator, pops=pops, shuffle=False)
         for x_step, _ in dataloader:
             probs, _ = model(x_step)
-            for i, k in enumerate(config['ks']):
+            for i, _ in enumerate(config['ks']):
                 Qs[i]= torch.cat((Qs[i], probs[i]), dim=0)
     log.info("    Inference run successfully! Writing outputs...!")
     
     # WRITE OUTPUTS:
     K = config['ks'][0]
-    if len(config['ks'])>1:
+    if len(config['ks'])==1:
         K = config['ks'][0]
         min_k = None
         max_k = None
@@ -85,8 +86,9 @@ def main(argv: List[str]):
         K = None
         min_k = config['ks'][0]
         max_k = config['ks'][-1]
-        
-    utils.write_outputs(Qs.cpu().numpy(), out_name, K, min_k, max_k, args.save_dir)
+    
+    Qs = [Q.cpu().numpy() for Q in Qs]
+    utils.write_outputs(Qs, out_name, K, min_k, max_k, args.save_dir)
     
     t1 = time.time()
     log.info("")
