@@ -36,13 +36,13 @@ def svd_flip(V, U):
     signs = np.sign(elements_for_sign)
     return V * signs[:, np.newaxis]
 
-def RSVD(A_uint8, N, M, k=8, seed=42, oversampling=10, power_iterations=0):
+def RSVD(A_uint8, N, M, k=8, seed=42, oversampling=10, power_iterations=2):
     """
     Randomized SVD para matrices uint8 de forma (n_features, m_samples).
     Retorna Vt_k de forma (k, m_samples).
     """
     rng = np.random.default_rng(seed)
-    k_prime = min(N, M, k + oversampling)
+    k_prime = max(k + oversampling, 20)
 
     total_start_time = time.time()
     log.info("    1) Generando Ω y Y = A @ Ω...")
