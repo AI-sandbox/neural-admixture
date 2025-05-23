@@ -21,7 +21,7 @@ The successful usage of this package requires a computer with enough RAM to be a
 
 ### Software requirements
 
-It is highly recommended to use GPUs for optimal performance - make sure CUDA drivers are properly installed.
+The package has been tested on both Linux (CentOS 7.9.2009, Ubuntu 18.04.5 LTS) and MacOS (BigSur 11.2.3, Intel and Monterey 12.3.1, M1). It is highly recommended to use GPUs for optimal performance - make sure CUDA drivers are properly installed.
 
 We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `conda`), and then install the package `neural-admixture` there. As an example, for `virtualenv`, one should launch the following commands:
 
@@ -85,6 +85,7 @@ Several files will be output to the `SAVE_PATH` directory (the `name` parameter 
 - A `.P` file, similar to ADMIXTURE.
 - A `.Q` file, similar to ADMIXTURE.
 - A `.pt` file, containing the weights of the trained network.
+- A `_pca.pt` file, containing the PCA weights of the trained network.
 - A `.json` file, with the configuration of the network.
 
 The last three files are required to run posterior inference using the network, so be aware of not deleting them accidentally! Logs are printed to the `stdout` channel by default. If you want to save them to a file, you can use the command `tee` along with a pipe:
@@ -109,7 +110,7 @@ For this command to work, files `./outputs/nadm_test.pt` and `./outputs/nadm_tes
 
 The supervised version of the algorithm can be used when all samples have a corresponding population label. This can be very benificial, especially when dealing with large imbalances in the data (_e.g_ data contains 1K samples from Pop1 and 50 samples from Pop2).
 
-In order to use the supervised mode, the flag `--supervised` must be passed when invoking the software, along with a `--pops_path` pointing to the file where the ancestries are defined. The latter file must be a single-column, headerless, plain text file where row `i` denotes the ancestry for the `i`-th sample in the data. The character `-` must be used for samples whose ancestry is missing/unknown.
+In order to use the supervised mode, the `--pops_path` argument pointing to the file where the ancestries are defined must be passed. The latter file must be a single-column, headerless, plain text file where row `i` denotes the ancestry for the `i`-th sample in the data. We currently do not support datasets which contain samples with missing ancestries.
 
 The supervised mode works by adding a scaled classification loss to the bottleneck of the algorithm (Equation 5 of the paper). The scaling factor can have a big impact on the performance. If it is too small, then the supervised loss will have little impact on the training, so results would be similar to an unsupervised run. On the other hand, if it is too large, then the supervision will dominate training, making the network overconfident in its predictions: essentially, one would get only binary assignments. The default value of the scaling factor is _η=0.05_, and can be controlled using the parameter `--supervised_loss_weight`.
 

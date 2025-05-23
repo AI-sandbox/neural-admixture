@@ -18,6 +18,7 @@ class SNPReader:
 
         Args:
             file (str): path to file.
+            master (bool): Wheter or not this process is the master for printing the output.
 
         Returns:
             np.ndarray: averaged genotype Dask array of shape (n_samples, n_snps)
@@ -84,7 +85,6 @@ class SNPReader:
 
         Args:
             file (str): path to file
-
         Returns:
             np.ndarray: averaged genotype numpy array of shape (n_samples, n_snps)
         """
