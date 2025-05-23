@@ -1,3 +1,4 @@
+import imp
 import logging
 import os
 import numpy as np
@@ -118,7 +119,9 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
 
         if num_gpus>0:
             packed_data = torch.empty((N, (M + 3) // 4), dtype=torch.uint8, device=device)
-            source_path = os.path.abspath("neural-admixture-dev/neural_admixture/src/utils_c/pack2bit.cu")
+            from neural_admixture import __file__ as installation_dir
+            from pathlib import Path
+            source_path = os.path.abspath(f"{Path(installation_dir).parent}/src/utils_c/pack2bit.cu")
             pack2bit = load(name="pack2bit", sources=[source_path], verbose=True)
             pack2bit.pack2bit_cpu_to_gpu(data, packed_data)
         else:
