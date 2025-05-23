@@ -26,7 +26,7 @@ The package has been tested on both Linux (CentOS 7.9.2009, Ubuntu 18.04.5 LTS) 
 We recommend creating a fresh Python 3.9 environment using `conda` (or `virtualenv`), and then install the package `neural-admixture` there. As an example, for `conda`, one should launch the following commands:
 
 ```console
-$ conda create -n nadmenv python=3.9
+$ conda create -n nadmenv python=3.10
 $ conda activate nadmenv
 (nadmenv) $ pip install neural-admixture
 ```
