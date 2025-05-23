@@ -23,15 +23,29 @@ The successful usage of this package requires a computer with enough RAM to be a
 
 The package has been tested on both Linux (CentOS 7.9.2009, Ubuntu 18.04.5 LTS) and MacOS (BigSur 11.2.3, Intel and Monterey 12.3.1, M1). It is highly recommended to use GPUs for optimal performance - make sure CUDA drivers are properly installed.
 
-We recommend creating a fresh Python 3.9 environment using `virtualenv` (or `conda`), and then install the package `neural-admixture` there. As an example, for `virtualenv`, one should launch the following commands:
+We recommend creating a fresh Python 3.9 environment using `conda` (or `virtualenv`), and then install the package `neural-admixture` there. As an example, for `conda`, one should launch the following commands:
 
 ```console
-$ virtualenv --python=python3.9 ~/venv/nadmenv
-$ source ~/venv/nadmenv/bin/activate
+$ conda create -n nadmenv python=3.9
+$ conda activate nadmenv
 (nadmenv) $ pip install neural-admixture
 ```
 
-**Important note:** Using GPUs will significantly accelerate processing and is the recommended setup for this package, especially when working with large datasets.
+If you want to use GPUs, also install:
+
+```console
+$ conda install cuda-nvcc -c nvidia
+```
+
+And make sure these environment variables are set in your shell before running your code:
+
+```console
+$ export CUDA_HOME=$CONDA_PREFIX/pkgs/cuda-toolkit
+$ export NCCL_HOME=$CONDA_PREFIX
+$ export LD_LIBRARY_PATH=$CONDA_PREFIX/lib
+```
+
+**Important note:** Using GPUs greatly speeds up processing and is recommended for large datasets.
 
 Specify the number of GPUs (`--num_gpus`) and CPUs (`--num_cpus`) you have available in your machine to optimize the performance.
 
