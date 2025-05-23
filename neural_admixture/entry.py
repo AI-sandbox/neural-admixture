@@ -22,7 +22,7 @@ def print_neural_admixture_banner(version: str="2.0") -> None:
     """
     init(autoreset=True)
     
-    banner = f"""
+    banner = fr"""
 {Fore.CYAN}
     _   _                      _       ___  ____  __  __ _______   _________ _    _ _____  ______ 
    | \ | |                    | |     / _ \|  _ \|  \/  |_   _\ \ / /__   __| |  | |  __ \|  ____|

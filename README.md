@@ -23,26 +23,12 @@ The successful usage of this package requires a computer with enough RAM to be a
 
 The package has been tested on both Linux (CentOS 7.9.2009, Ubuntu 18.04.5 LTS) and MacOS (BigSur 11.2.3, Intel and Monterey 12.3.1, M1). It is highly recommended to use GPUs for optimal performance - make sure CUDA drivers are properly installed.
 
-We recommend creating a fresh Python 3.9 environment using `conda` (or `virtualenv`), and then install the package `neural-admixture` there. As an example, for `conda`, one should launch the following commands:
+We recommend creating a fresh Python 3.12 environment using `conda` (or `virtualenv`), and then install the package `neural-admixture` there. As an example, for `conda`, one should launch the following commands:
 
 ```console
-$ conda create -n nadmenv python=3.10
+$ conda create -n nadmenv python=3.12
 $ conda activate nadmenv
 (nadmenv) $ pip install neural-admixture
-```
-
-If you want to use GPUs, also install:
-
-```console
-$ conda install cuda-nvcc -c nvidia
-```
-
-And make sure these environment variables are set in your shell before running your code:
-
-```console
-$ export CUDA_HOME=$CONDA_PREFIX/pkgs/cuda-toolkit
-$ export NCCL_HOME=$CONDA_PREFIX
-$ export LD_LIBRARY_PATH=$CONDA_PREFIX/lib
 ```
 
 **Important note:** Using GPUs greatly speeds up processing and is recommended for large datasets.
@@ -95,11 +81,9 @@ $ neural-admixture train --k 8 --data_path snps_data.bed --save_dir SAVE_PATH --
 with some parameters such as the decoder initialization or the save directories not having a direct equivalent.
 
 Several files will be output to the `SAVE_PATH` directory (the `name` parameter will be used to create the whole filenames):
-- If the unsupervised version is run, a `Pickle` binary file containing the PCA object (using the `init_name` parameter), as well as an image file containing a PCA plot.
 - A `.P` file, similar to ADMIXTURE.
 - A `.Q` file, similar to ADMIXTURE.
 - A `.pt` file, containing the weights of the trained network.
-- A `_pca.pt` file, containing the PCA weights of the trained network.
 - A `.json` file, with the configuration of the network.
 
 The last three files are required to run posterior inference using the network, so be aware of not deleting them accidentally! Logs are printed to the `stdout` channel by default. If you want to save them to a file, you can use the command `tee` along with a pipe:
@@ -126,7 +110,7 @@ The supervised version of the algorithm can be used when all samples have a corr
 
 In order to use the supervised mode, the `--pops_path` argument pointing to the file where the ancestries are defined must be passed. The latter file must be a single-column, headerless, plain text file where row `i` denotes the ancestry for the `i`-th sample in the data. We currently do not support datasets which contain samples with missing ancestries.
 
-The supervised mode works by adding a scaled classification loss to the bottleneck of the algorithm (Equation 5 of the paper). The scaling factor can have a big impact on the performance. If it is too small, then the supervised loss will have little impact on the training, so results would be similar to an unsupervised run. On the other hand, if it is too large, then the supervision will dominate training, making the network overconfident in its predictions: essentially, one would get only binary assignments. The default value of the scaling factor is _η=0.05_, and can be controlled using the parameter `--supervised_loss_weight`.
+The supervised mode works by adding a scaled classification loss to the bottleneck of the algorithm (Equation 5 of the paper). The scaling factor can have a big impact on the performance. If it is too small, then the supervised loss will have little impact on the training, so results would be similar to an unsupervised run. On the other hand, if it is too large, then the supervision will dominate training, making the network overconfident in its predictions: essentially, one would get only binary assignments. The default value of the scaling factor is _η=100, and can be controlled using the parameter `--supervised_loss_weight`.
 
 Basically, if on validation data you are getting single-ancestry estimations when you expect admixed estimations, try setting a smaller value for the supervised loss scaling factor _η_ (`--supervised_loss_weight`).
 
