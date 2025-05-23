@@ -36,7 +36,7 @@ def print_neural_admixture_banner(version: str="2.0") -> None:
     info = f"""
         {Fore.CYAN}                             Version: {version}{Style.RESET_ALL}
         {Fore.CYAN}            Authors: Joan Saurina Ricós, Albert Dominguez Mantes, 
-                        Daniel Mas Montserrat and Alexander G. Ioannidis.{Style.RESET_ALL}
+                            Daniel Mas Montserrat and Alexander G. Ioannidis.{Style.RESET_ALL}
         {Fore.CYAN}            Help: https://github.com/AI-sandbox/neural-admixture{Style.RESET_ALL}
             """
     
