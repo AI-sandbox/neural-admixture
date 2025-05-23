@@ -45,10 +45,10 @@ def RSVD(A_uint8, N, M, k=8, seed=42, oversampling=10, power_iterations=2):
     k_prime = max(k + oversampling, 20)
 
     total_start_time = time.time()
-    log.info("    1) Generando Ω y Y = A @ Ω...")
+    log.info("    1) Generating Ω y Y = A @ Ω...")
     Omega = rng.standard_normal(size=(M, k_prime), dtype=np.float32)
     Y = rsvd.multiply_A_omega(A_uint8, Omega)
-    log.info(f"       Y.shape={Y.shape}, time={time.time() - total_start_time:.4f}s")
+    log.info(f"       Time={time.time() - total_start_time:.4f}s")
 
     if power_iterations > 0:
         iter_start = time.time()
@@ -60,18 +60,18 @@ def RSVD(A_uint8, N, M, k=8, seed=42, oversampling=10, power_iterations=2):
             Y = rsvd.multiply_A_omega(A_uint8, B_tmp)     # (n, k_prime)
         log.info(f"       Power iterations time={time.time() - iter_start:.4f}s")
 
-    log.info("    2) QR de Y...")
+    log.info("    2) QR of Y...")
     qr_start = time.time()
     Q, _ = np.linalg.qr(Y, mode='reduced')            # (n, k_prime)
-    log.info(f"       Q.shape={Q.shape}, time={time.time() - qr_start:.4f}s")
+    log.info(f"       Time={time.time() - qr_start:.4f}s")
 
     log.info("    3) B = Qᵀ @ A...")
     b_start = time.time()
     Q = np.ascontiguousarray(Q.T)
     B = rsvd.multiply_QT_A(Q, A_uint8)                   # (k_prime, m)
-    log.info(f"       B.shape={B.shape}, time={time.time() - b_start:.4f}s")
+    log.info(f"       Time={time.time() - b_start:.4f}s")
 
-    log.info("    4) SVD de B...")
+    log.info("    4) SVD of B...")
     svd_start = time.time()
     Ut, _, Vt = np.linalg.svd(B, full_matrices=False)
     log.info(f"       SVD time={time.time() - svd_start:.4f}s")
