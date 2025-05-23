@@ -1,6 +1,5 @@
 # cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False, cdivision=True
 cimport numpy as np
-cimport openmp as omp
 from cython.parallel import parallel, prange
 from libc.math cimport fmax, fmin, log, log1p, sqrt, fmaxf, fminf, sqrtf
 from libc.stdlib cimport calloc, free

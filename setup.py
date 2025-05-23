@@ -13,8 +13,8 @@ log = logging.getLogger(__name__)
 system = platform.system()
 
 if system == "Linux":
-    compile_args = ['-fopenmp', '-O3', '-ffast-math', '-march=native', '-fno-wrapv']
-    link_args = ['-fopenmp', '-lm']
+    compile_args = ['-O3', '-ffast-math', '-march=native', '-fno-wrapv']
+    link_args = ['-lm']
     os.environ["CC"] = "gcc"
     os.environ["CXX"] = "g++"
 elif system == "Darwin":  # macOS
@@ -24,9 +24,9 @@ elif system == "Darwin":  # macOS
     os.environ["CXX"] = "clang++"
 elif system == "Windows":
     if os.environ.get("CC", "").endswith("gcc"):
-        compile_args = ['-O3', '-fopenmp']
+        compile_args = ['-O3']
     else:
-        compile_args = ['/O2', '/openmp']
+        compile_args = ['/O2']
 else:
     log.info(f"System not recognized: {system}")
     sys.exit(1)
