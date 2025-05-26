@@ -23,6 +23,7 @@ The successful usage of this package requires a computer with enough RAM to be a
 
 The package has been tested on both Linux (CentOS 7.9.2009, Ubuntu 18.04.5 LTS) and MacOS (BigSur 11.2.3, Intel and Monterey 12.3.1, M1). It is highly recommended to use GPUs for optimal performance - make sure CUDA drivers are properly installed.
 
+## Installation guide
 We recommend creating a fresh Python 3.12 environment using `conda` (or `virtualenv`), and then install the package `neural-admixture` there. As an example, for `conda`, one should launch the following commands:
 
 ```console
@@ -35,13 +36,6 @@ $ conda activate nadmenv
 
 Specify the number of GPUs (`--num_gpus`) and CPUs (`--num_cpus`) you have available in your machine to optimize the performance.
 
-## Installation Guide
-
-The package can be easily installed in at most a few minutes using `pip` (make sure to add the `--upgrade` flag if updating the version):
-
-```console
-(nadmenv) $ pip install neural-admixture
-```
 
 ## Usage 
 ### Running Neural ADMIXTURE
@@ -131,6 +125,23 @@ The datasets _All-Chms_, _Chm-22_ and _Chm-22-Sim_ used in the Experiments secti
 ## Demo
 
 To run the software with a small demo dataset, check the instructions in [the corresponding folder of the repository](https://github.com/AI-sandbox/neural-admixture/tree/main/demo).
+
+## Troubleshooting
+
+### CUDA issues
+
+If you get an error similar to the following (when using GPU):
+
+
+```
+OSError: CUDA_HOME environment variable is not set. Please set it to your CUDA install root.
+```
+
+simply installing `nvcc` using `conda`/`mamba` should fix it:
+
+```console
+$ conda install -c nvidia nvcc
+```
 
 ## License
 
