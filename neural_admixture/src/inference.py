@@ -16,19 +16,24 @@ log = logging.getLogger(__name__)
 def main(argv: List[str]):
     """Inference entry point
     """
-    # CHECK WHETHER THERE'S GPU OR NOT:
-    if torch.cuda.is_available():
-        device = torch.device('cuda:0')
-        num_gpus = 1
-        pin = False
-    else:
-        device = torch.device('cpu')
-        num_gpus = 0
-        pin = True
-        
+
     # LOAD ARGUMENTS:
     args = utils.parse_infer_args(argv)
-    log.info(f"    There is {num_gpus} GPUs available.")
+
+    if args.num_gpus > 1:
+        raise ValueError("Neural Admixture does not support multi-GPU inference. Please set --num_gpus to 1 (for single GPU) or 0 (for CPU only).")
+
+    if args.num_gpus == 1:
+        if torch.cuda.is_available():
+            device = torch.device('cuda:0')
+        elif torch.backends.mps.is_available():
+            device = torch.device('mps')
+        else:
+            raise RuntimeError("GPU was specified but no GPU was found. Please set --num_gpus to 0 for CPU only inference.")
+    else:
+        device = torch.device('cpu')
+        
+    log.info(f"    There is {args.num_gpus} GPUs available.")
     log.info("")
     data_file_str = args.data_path
     out_name = args.out_name
@@ -42,7 +47,7 @@ def main(argv: List[str]):
     try:
         with open(config_file_str, 'r') as fb:
             config = json.load(fb)
-    except FileNotFoundError as fnfe:
+    except FileNotFoundError as _:
         log.error(f"    Config file ({config_file_str}) not found. Make sure it is in the correct directory and with the correct name.")
         return 1
     except Exception as e:
@@ -69,7 +74,7 @@ def main(argv: List[str]):
     log.info("    Running inference...")
     with torch.inference_mode():
         pops = torch.zeros(data.size(0), device=device)
-        dataloader = dataloader_admixture(data, batch_size_inference_Q, num_gpus, seed, generator, pops=pops, shuffle=False)
+        dataloader = dataloader_admixture(data, batch_size_inference_Q, args.num_gpus, seed, generator, pops=pops, shuffle=False)
         for x_step, _ in dataloader:
             probs, _ = model(x_step)
             for i, _ in enumerate(config['ks']):

@@ -59,7 +59,7 @@ def parse_infer_args(argv: List[str]):
     parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
     
     parser.add_argument('--num_cpus', required=False, default=1, type=int, help='Number of CPUs to be used in the execution.')
-
+    parser.add_argument('--num_gpus', required=False, default=0, type=int, help='Number of GPUs to be used in the execution.')
     return parser.parse_args(argv)
 
 def read_data(tr_file: str, tr_pops_f: str=None) -> np.ndarray:
