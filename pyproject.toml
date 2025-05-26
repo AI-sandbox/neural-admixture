@@ -1,9 +1,13 @@
 [build-system]
 requires = [
     "setuptools >= 45",
-    "setuptools_scm[toml]>=6.2"
+    "setuptools_scm[toml]>=6.2",
+    "Cython",
+    "numpy",
+    "torch"
 ]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 write_to = "neural_admixture/_version.py"
+fallback_version = "0.1.0"

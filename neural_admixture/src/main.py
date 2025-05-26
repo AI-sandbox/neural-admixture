@@ -1,43 +1,47 @@
 import argparse
-import dask.array as da
 import logging
 import sys
 import time
 import torch
+import numpy as np
+
 from pathlib import Path
-from sklearn.model_selection import KFold
 from typing import List
 from argparse import ArgumentError, ArgumentTypeError
 from pathlib import Path
 
 from . import utils
+from ..model.train import train
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
-def fit_model(args: argparse.Namespace, trX: da.core.Array, device: torch.device, num_gpus: int,
-              tr_pops: str, master: bool) -> None:
-    """Wrapper function to start training
+def fit_model(args: argparse.Namespace, data: torch.Tensor, device: torch.device, num_gpus: int,
+            master: bool, V: np.ndarray, pops: np.ndarray) -> None:
     """
-    (epochs, batch_size, learning_rate, save_dir, activation_str, hidden_size, initialization, 
-    n_components, name, seed, supervised_loss_weight, num_cpus) = (int(args.epochs), int(args.batch_size), float(args.learning_rate), args.save_dir, 
-                                args.activation, int(args.hidden_size), args.initialization if not bool(args.supervised) else 'supervised', 
-                                int(args.pca_components), args.name, int(args.seed), float(args.supervised_loss_weight), int(args.num_cpus))
-        
-    utils.set_seed(seed)
+    Wrapper function to start training
+    """
+    (epochs, batch_size, learning_rate, save_dir, hidden_size, name, seed, n_components) = (int(args.epochs), int(args.batch_size), float(args.learning_rate), args.save_dir, 
+                                                                                        int(args.hidden_size), args.name, int(args.seed), int(args.n_components))
+            
+    if args.k is not None:
+        K = int(args.k)
+        min_k = None
+        max_k = None
+    else:
+        min_k = int(args.min_k)
+        max_k = int(args.max_k)
+        K = None
+
+    Ps, Qs, model = train(epochs, batch_size, learning_rate, K, seed, data, device, num_gpus, hidden_size, master, V, pops, min_k, max_k, n_components)
     
-    K = int(args.k)
-    data, y = utils.initialize_data(master, trX, tr_pops)
-    P, Q, model = utils.train(initialization, device, save_dir, name, K, seed, n_components, epochs, batch_size, learning_rate, data, num_gpus, 
-                            activation_str, hidden_size, master, num_cpus, y, supervised_loss_weight)
     if master:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
         save_path = f'{save_dir}/{name}.pt'
-        state_dict = {key: value for key, value in model.state_dict().items() if key != 'P'}
+        state_dict = {key: value for key, value in model.state_dict().items() if not key.startswith('decoders')}
         torch.save(state_dict, save_path)
         model.save_config(name, save_dir)
-        
-        utils.write_outputs(Q, name, K, save_dir, P)
+        utils.write_outputs(Qs, name, K, min_k, max_k, save_dir, Ps)
 
     return
 
@@ -75,8 +79,9 @@ def perform_cross_validation(args: argparse.Namespace, trX: da.core.Array, devic
     utils.save_cv_error_plot(cv_errs_reduced, args.save_dir)
 """
 
-def main(rank: int, argv: List[str], num_gpus):
-    """Training entry point
+def main(rank: int, argv: List[str], num_gpus: int, data: torch.Tensor, V: np.ndarray, pops: np.ndarray):
+    """
+    Training entry point
     """
     utils.ddp_setup('begin', rank, num_gpus)
     master = rank == 0
@@ -101,17 +106,23 @@ def main(rank: int, argv: List[str], num_gpus):
         if master:
             log.info(f"    There are {args.num_cpus} CPUs and {num_gpus} GPUs available for this execution.")
             log.info("")
-            log.info(f"    Running on K = {args.k}.")
+            if args.k is not None:
+                log.info(f"    Running on K = {args.k}.")
+            else:
+                assert args.min_k is not None and args.max_k is not None, "You must provide either K or both min_k and max_k."
+                min_k = int(args.min_k)
+                max_k = int(args.max_k)
+                assert min_k < max_k, f"min_k ({min_k}) must be less than max_k ({max_k})."
+                log.info(f"    Running from K={min_k} to K={max_k}.")
             log.info("")
             Path(args.save_dir).mkdir(parents=True, exist_ok=True)
         
         t0 = time.time()
-        trX, tr_pops = utils.read_data(args.data_path, master, args.populations_path, args.imputation)
-
+    
         #if args.cv is not None:
         #    perform_cross_validation(args, trX, device, num_gpus, master)   
         
-        fit_model(args, trX, device, num_gpus, tr_pops, master)
+        fit_model(args, data, device, num_gpus, master, V, pops)
         
         if master:
             t1 = time.time()

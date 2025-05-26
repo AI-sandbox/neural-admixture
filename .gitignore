@@ -146,5 +146,7 @@ outputs/
 # DS_Store
 **/.DS_Store
 
+# Cython/C
+*.c
 # Version file
 neural_admixture/_version.py
