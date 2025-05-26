@@ -30,18 +30,11 @@ cpdef double loglikelihood(const unsigned char[:,::1] G,
         p = &P[j,0]
         for i in range(N):
             if G[i,j] != 3:
-                
                 rec = _reconstruct(p, &Q[i,0], K)
-                if rec < eps:
-                    rec = eps
-                elif rec > 1.0 - eps:
-                    rec = 1.0 - eps
+                rec = fmax(eps, fmin(rec, 1.0 - eps))
                 
                 g_d = <double>G[i,j]
-                if g_d < eps:
-                    g_d = eps
-                elif g_d > 2.0 - eps:
-                    g_d = 2.0 - eps
+                g_d = fmax(eps, fmin(g_d, 2.0 - eps))
                 
                 logl += g_d * log(rec) + (2.0 - g_d) * log1p(-rec)
     return logl
