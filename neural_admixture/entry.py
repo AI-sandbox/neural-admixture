@@ -93,7 +93,7 @@ def main():
         if num_gpus_index < len(arg_list):
             num_gpus = int(arg_list[num_gpus_index])
     
-    max_devices = torch.cuda.device_count()
+    max_devices = torch.cuda.device_count() if not torch.backends.mps.is_available() else 1
     if num_gpus > max_devices:
         log.warning(f"    Requested {num_gpus} GPUs, but only {max_devices} are available. Using {max_devices} GPUs.")
         num_gpus = max_devices

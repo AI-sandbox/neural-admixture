@@ -34,8 +34,7 @@ $ conda activate nadmenv
 
 **Important note:** Using GPUs greatly speeds up processing and is recommended for large datasets.
 
-Specify the number of GPUs (`--num_gpus`) and CPUs (`--num_cpus`) you have available in your machine to optimize the performance.
-
+Specify the number of GPUs (`--num_gpus`) and CPUs (`--num_cpus`) you have available in your machine to optimize the performance. For MacOS users with an Apple Metal chip, using `--num_gpus 1` will enable MPS acceleration in the software. Note that despite MPS acceleration being supported, the RAM available in laptops is probably limited, so larger datasets should be run on CUDA-capable GPUs, which the software is more optimized for.
 
 ## Usage 
 ### Running Neural ADMIXTURE

@@ -184,7 +184,7 @@ class Q_P(torch.nn.Module):
         for dec in self.decoders.decoders:
             dec.weight.data.clamp_(0., 1.)
     
-    def create_custom_adam(self, lr: float=1e-5) -> torch.optim.Adam:
+    def create_custom_adam(self, device: torch.device, lr: float=1e-5) -> torch.optim.Adam:
         """
         Creates a custom Adam optimizer with different learning rates for different phases.
 
@@ -201,7 +201,7 @@ class Q_P(torch.nn.Module):
         {'params': self.V, 'lr': lr},
         {'params': self.decoders.parameters(), 'lr': lr}
         ]
-        return torch.optim.Adam(p, betas=[0.9, 0.95], fused=True)
+        return torch.optim.Adam(p, betas=[0.9, 0.95], fused=device.type != 'mps')
     
     def save_config(self, name: str, save_dir: str) -> None:
         """
@@ -359,7 +359,7 @@ class NeuralAdmixture():
             log.info("")
             log.info("    Starting training...")
             log.info("")
-        self.optimizer = self.raw_model.create_custom_adam(self.lr)
+        self.optimizer = self.raw_model.create_custom_adam(device=self.device, lr=self.lr)
         dataloader = dataloader_admixture(data, self.batch_size, self.num_gpus, self.seed, self.generator, pops, shuffle=True)
         for epoch in tqdm(range(self.epochs), desc="Epochs", file=sys.stderr):
             run_epoch(epoch, dataloader)
@@ -372,7 +372,7 @@ class NeuralAdmixture():
         with torch.inference_mode():
             dataloader = dataloader_admixture(data, batch_size_inference_Q, 1 if self.num_gpus >= 1 else 0, self.seed, self.generator, pops, shuffle=False)
             for x_step, _ in dataloader:
-                if self.num_gpus>0:
+                if self.pack2bit is not None:
                     unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
                     self.pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
                     probs, _ = self.model(unpacked_step)
@@ -400,7 +400,7 @@ class NeuralAdmixture():
         """
         loss_acc = 0
         for x_step, _ in dataloader:
-            if self.num_gpus>0:
+            if self.pack2bit is not None:
                 unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
                 self.pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
                 loss = self._run_step(unpacked_step)
@@ -440,7 +440,7 @@ class NeuralAdmixture():
         """
         loss_acc = 0
         for x_step, pops_step in dataloader:
-            if self.num_gpus>0:
+            if self.pack2bit is not None:
                 unpacked_step = torch.empty((x_step.shape[0], self.M), dtype=torch.uint8, device=self.device)
                 self.pack2bit.unpack2bit_gpu_to_gpu(x_step, unpacked_step)
                 loss = self._run_step_supervised(unpacked_step, pops_step)

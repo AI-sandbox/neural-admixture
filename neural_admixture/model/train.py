@@ -67,7 +67,7 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
                     del gmm_objs
                 del X_pca
                 
-                data = torch.as_tensor(data, dtype=torch.uint8, device='cpu')
+                data = torch.as_tensor(data, dtype=torch.uint8, device='cpu' if device.type != 'mps' else 'mps')
             else:
                 data = data.numpy()
                 
@@ -80,8 +80,8 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
                 y_num = to_idx_mapper(pops[:])     
                 P = np.vstack([data[y_num == idx, :].astype(np.float32).mean(axis=0) for idx in range(K)])
                                 
-                data = torch.as_tensor(data, dtype=torch.uint8, device='cpu')
-                
+                data = torch.as_tensor(data, dtype=torch.uint8, device='cpu' if device.type != 'mps' else 'mps')
+
         if torch.distributed.is_initialized():    
             dist.barrier()
         
@@ -116,7 +116,7 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
             if pops is not None:
                 pops = torch.as_tensor(y_num, dtype=torch.int64, device=device)
 
-        if num_gpus>0:
+        if num_gpus>0 and device.type != 'mps':
             packed_data = torch.empty((N, (M + 3) // 4), dtype=torch.uint8, device=device)
             from neural_admixture import __file__ as installation_dir
             from pathlib import Path
@@ -131,7 +131,7 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
         Qs, Ps, model = model.launch_training(P_init, packed_data, hidden_size, V.shape[1], V, M, N, pops)
         
         if master:
-            data = data.numpy()
+            data = data.cpu().numpy()
             if K is not None:
                 P = np.ascontiguousarray(Ps[0].astype(np.float64))
                 Q = np.ascontiguousarray(Qs[0].astype(np.float64))
