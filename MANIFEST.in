@@ -1,2 +1,1 @@
-recursive-include neural_admixture/src/utils_c *.cu
-recursive-include neural_admixture/src/utils_c *.h
+include neural_admixture/src/utils_c/*.cu
