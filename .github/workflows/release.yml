@@ -9,14 +9,15 @@ jobs:
     name: ${{ matrix.platform }} py${{ matrix.python-version }}
     runs-on: ${{ matrix.platform }}
     strategy:
+      fail-fast: false # Opcional: para que no falle todo si una combinación falla
       matrix:
-        platform: [ubuntu-latest]
+        platform: [ubuntu-latest, macos-latest] # Añadido macos-latest
         python-version: ["3.10", "3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4 # Actualizado
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4 # Actualizado
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -25,24 +26,55 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install setuptools tox tox-gh-actions
 
-      - name: Test with tox
+      - name: Test with tox (Linux with Xvfb)
+        if: matrix.platform == 'ubuntu-latest' # Solo para Linux
         uses: GabrielBB/xvfb-action@v1
         with:
           run: python -m tox
         env:
           PLATFORM: ${{ matrix.platform }}
 
-  build:
-    name: Build wheels with cibuildwheel
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
+      - name: Test with tox (macOS)
+        if: matrix.platform == 'macos-latest' # Test directo en macOS
+        run: python -m tox
+        env:
+          PLATFORM: ${{ matrix.platform }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+  build:
+    name: Build wheels on ${{ matrix.platform }}
+    needs: test
+    runs-on: ${{ matrix.platform }} # Estrategia de matriz para la plataforma
+    strategy:
+      fail-fast: false # Opcional
+      matrix:
+        platform: [ubuntu-latest, macos-latest] # Añadido macos-latest
+    steps:
+      - uses: actions/checkout@v4 # Actualizado
+
+      - name: Set up Python for build
+        uses: actions/setup-python@v4 # Actualizado
         with:
-          python-version: "3.12"
+          python-version: "3.12" # Python para ejecutar cibuildwheel
+
+      # Inspirado en tu segundo ejemplo: Setup OpenMP para macOS si es necesario
+      - name: Setup OpenMP (macOS)
+        if: matrix.platform == 'macos-latest' # Solo para macOS
+        # Este paso es necesario si tus extensiones C/C++ usan OpenMP.
+        # Si no es el caso, puedes omitirlo.
+        shell: bash
+        run: |
+          echo "Checking and installing libomp for macOS if needed..."
+          if ! brew list libomp &>/dev/null; then
+            brew install libomp
+          else
+            echo "libomp is already installed."
+          fi
+          # Las variables de entorno CC, CXX, CFLAGS, CXXFLAGS, LDFLAGS
+          # pueden necesitar ser configuradas aquí si cibuildwheel no las recoge
+          # automáticamente o si tu build lo requiere.
+          # Por ejemplo, podrías necesitar añadir a GITHUB_ENV:
+          # echo "CPPFLAGS=-I$(brew --prefix libomp)/include" >> $GITHUB_ENV
+          # echo "LDFLAGS=-L$(brew --prefix libomp)/lib" >> $GITHUB_ENV
 
       - name: Install cibuildwheel
         run: python -m pip install --upgrade cibuildwheel
@@ -50,30 +82,45 @@ jobs:
       - name: Build wheels
         run: cibuildwheel --output-dir dist
         env:
-          CIBW_SKIP: "pp* *musllinux*"
-          CIBW_ARCHS: "auto"
+          # Común para cibuildwheel
+          CIBW_SKIP: "pp* *musllinux*" # pp* para PyPy, *musllinux* si no quieres wheels musl
           CIBW_BUILD_VERBOSITY: 1
+          # Específico para macOS (inspirado en tu segundo ejemplo y mejores prácticas):
+          # Construye para x86_64 y arm64 (Apple Silicon).
+          # 'auto' podría solo construir para la arquitectura del runner (x86_64 en macos-latest).
+          # 'auto64' es una buena opción para obtener ambas arquitecturas comunes.
+          CIBW_ARCHS_MACOS: ${{ matrix.platform == 'macos-latest' && 'auto64' || 'auto' }}
+          # Si necesitas tests específicos durante la construcción con cibuildwheel:
+          # CIBW_TEST_REQUIRES: pytest
+          # CIBW_TEST_COMMAND: "pytest {project}/tests" # Ajusta la ruta a tus tests
 
       - name: Upload dist as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4 # Actualizado
         with:
-          name: dist-wheels
+          name: dist-wheels-${{ matrix.platform }} # Nombre de artefacto único por plataforma
           path: dist/
 
   upload-pypi:
     name: Upload to PyPI
-    needs: build
+    needs: build # Depende de que todos los trabajos de 'build' (para cada plataforma) finalicen
     runs-on: ubuntu-latest
+    # Solo se ejecuta en eventos de 'release published'
+    if: github.event_name == 'release' && github.event.action == 'published'
     steps:
-      - uses: actions/checkout@v3
+      # No es necesario checkout si solo descargas y publicas
+      # - uses: actions/checkout@v4
 
-      - name: Download built wheels
-        uses: actions/download-artifact@v4
+      - name: Download all built wheels
+        uses: actions/download-artifact@v4 # Actualizado
         with:
-          name: dist-wheels
-          path: dist/
+          path: dist/ # Directorio donde se descargarán todos los artefactos
+          pattern: dist-wheels-* # Patrón para descargar todos los artefactos de wheels
+          merge-multiple: true # Fusiona múltiples artefactos en el directorio 'path'
 
-      - name: Publish package
+      - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
+          # gh-action-pypi-publish subirá todos los .whl y .tar.gz de dist/
+          # Asegúrate de que también construyes y subes un sdist si lo deseas.
+          # Podrías añadir un trabajo 'build_sdist' similar al segundo ejemplo.
