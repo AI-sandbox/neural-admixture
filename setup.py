@@ -18,7 +18,7 @@ if system == "Linux":
     os.environ["CC"] = "gcc"
     os.environ["CXX"] = "g++"
 elif system == "Darwin":  # macOS
-    compile_args = ['-O3', '-ffast-math', '-march=native', '-fno-wrapv']
+    compile_args = ['-O3', '-ffast-math', '-fno-wrapv']
     link_args = ['-lm']
     os.environ["CC"] = "clang"
     os.environ["CXX"] = "clang++"
