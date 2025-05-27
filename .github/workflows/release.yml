@@ -55,12 +55,22 @@ jobs:
           CIBW_ENVIRONMENT: "CFLAGS='-O2'"
           CIBW_BUILD_VERBOSITY: 1
 
+      - name: Upload dist as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist-wheels
+          path: dist/
+
   upload-pypi:
     name: Upload to PyPI
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Download built wheels
+        uses: actions/download-artifact@v3
+        with:
+          name: dist-wheels
+          path: dist/
 
       - name: Publish package
         uses: pypa/gh-action-pypi-publish@release/v1
