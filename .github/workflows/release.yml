@@ -52,11 +52,10 @@ jobs:
         env:
           CIBW_SKIP: "pp* *musllinux*"
           CIBW_ARCHS: "auto"
-          CIBW_ENVIRONMENT: "CFLAGS='-O2'"
           CIBW_BUILD_VERBOSITY: 1
 
       - name: Upload dist as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dist-wheels
           path: dist/
@@ -66,8 +65,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
+
       - name: Download built wheels
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: dist-wheels
           path: dist/
