@@ -51,6 +51,7 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
                     end_idx = min(i + 1024, N)
                     batch = data[i:end_idx, :].astype(np.float32)/2
                     X_pca[i:end_idx] = batch@V.T
+                X_pca = X_pca.astype('float64')
                 
                 # GMM:
                 log.info("")

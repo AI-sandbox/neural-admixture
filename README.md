@@ -56,7 +56,7 @@ $ neural-admixture train --min_k K_MIN --max_k K_MAX --name RUN_NAME --data_path
 For supervised Neural ADMIXTURE:
 
 ```console
-$ neural-admixture train --k K --supervised --populations_path POPS_PATH --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH # only single-head support at the moment
+$ neural-admixture train --k K --pops_path POPS_PATH --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH # only single-head support at the moment
 ```
 
 As an example, the following ADMIXTURE call
