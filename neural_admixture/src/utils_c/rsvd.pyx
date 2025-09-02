@@ -24,7 +24,7 @@ cpdef inline void _multiply_A_omega_uint8_float_parallel(
         int i, j, l
         float temp_sum
 
-    for i in prange(n_rows_A, nogil=True, schedule='guided'):
+    for i in prange(n_rows_A, nogil=True, schedule="static", chunksize=16):
         for j in range(k_prime):
             temp_sum = 0.0
             for l in range(m_cols_A):

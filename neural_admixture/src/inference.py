@@ -13,12 +13,9 @@ from ..model.neural_admixture import Q_P
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
-def main(argv: List[str]):
+def main(args: List[str], t0: float):
     """Inference entry point
     """
-
-    # LOAD ARGUMENTS:
-    args = utils.parse_infer_args(argv)
 
     if args.num_gpus > 1:
         raise ValueError("Neural Admixture does not support multi-GPU inference. Please set --num_gpus to 1 (for single GPU) or 0 (for CPU only).")
@@ -64,7 +61,6 @@ def main(argv: List[str]):
     log.info("")
     
     # LOAD DATA:
-    t0 = time.time()
     data, *_ = utils.read_data(data_file_str)
     data = torch.as_tensor(data, dtype=torch.uint8, device=device)
     

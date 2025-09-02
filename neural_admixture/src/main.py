@@ -79,7 +79,7 @@ def perform_cross_validation(args: argparse.Namespace, trX: da.core.Array, devic
     utils.save_cv_error_plot(cv_errs_reduced, args.save_dir)
 """
 
-def main(rank: int, argv: List[str], num_gpus: int, data: torch.Tensor, V: np.ndarray, pops: np.ndarray):
+def main(rank: int, args: List[str], num_gpus: int, data: torch.Tensor, V: np.ndarray, pops: np.ndarray, t0: float):
     """
     Training entry point
     """
@@ -87,12 +87,6 @@ def main(rank: int, argv: List[str], num_gpus: int, data: torch.Tensor, V: np.nd
     master = rank == 0
     
     try:
-        if any(arg in argv for arg in ['-h', '--help']):
-            if master:
-                args = utils.parse_train_args(argv)
-            return
-        args = utils.parse_train_args(argv)
-        
         if num_gpus>0:
             if torch.cuda.is_available():
                 device = torch.device(f'cuda:{int(rank)}')
@@ -104,21 +98,10 @@ def main(rank: int, argv: List[str], num_gpus: int, data: torch.Tensor, V: np.nd
             device = torch.device('cpu')
         
         if master:
-            log.info(f"    There are {args.num_cpus} CPUs and {num_gpus} GPUs available for this execution.")
-            log.info("")
-            if args.k is not None:
-                log.info(f"    Running on K = {args.k}.")
-            else:
-                assert args.min_k is not None and args.max_k is not None, "You must provide either K or both min_k and max_k."
-                min_k = int(args.min_k)
-                max_k = int(args.max_k)
-                assert min_k < max_k, f"min_k ({min_k}) must be less than max_k ({max_k})."
-                log.info(f"    Running from K={min_k} to K={max_k}.")
+            log.info(f"    There are {args.threads} threads and {num_gpus} GPUs available for this execution.")
             log.info("")
             Path(args.save_dir).mkdir(parents=True, exist_ok=True)
-        
-        t0 = time.time()
-    
+            
         #if args.cv is not None:
         #    perform_cross_validation(args, trX, device, num_gpus, master)   
         

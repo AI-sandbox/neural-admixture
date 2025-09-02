@@ -99,4 +99,5 @@ class SNPReader:
         else:
             log.error("    Invalid format. Unrecognized file format. Make sure file ends with .bed, .pgen or .vcf .")
             sys.exit(1)
+        assert int(G.min()) == 0 and int(G.max()) in (2, 3), "Only biallelic SNPs are supported. Please make sure multiallelic sites have been removed."
         return G if G.mean() < 1 else 2 - G

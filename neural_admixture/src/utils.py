@@ -1,4 +1,3 @@
-import configargparse
 import logging
 import random
 import os
@@ -7,60 +6,11 @@ import numpy as np
 import torch
 
 from pathlib import Path
-from typing import List
 
 from .snp_reader import SNPReader
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
-
-def parse_train_args(argv: List[str]):
-    """Training arguments parser
-    """
-    parser = configargparse.ArgumentParser(prog='neural-admixture train',
-                                           description='Rapid population clustering with autoencoders - training mode',
-                                           config_file_parser_class=configargparse.YAMLConfigFileParser)
-    
-    parser.add_argument('--epochs', required=False, type=int, default=250, help='Maximum number of epochs.')
-    parser.add_argument('--batch_size', required=False, default=800, type=int, help='Batch size.')
-    parser.add_argument('--learning_rate', required=False, default=20e-4, type=float, help='Learning rate.')
-
-    parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
-    parser.add_argument('--k', required=False, type=int, help='Number of populations/clusters.')
-    parser.add_argument('--min_k', required=False, type=int, help='Minimum number of populations/clusters (multi-head)')
-    parser.add_argument('--max_k', required=False, type=int, help='Maximum number of populations/clusters (multi-head)')
-    parser.add_argument('--hidden_size', required=False, default=1024, type=int, help='Dimension of first projection in encoder.')
-    parser.add_argument('--save_dir', required=True, type=str, help='Save model in this directory')
-    parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data')
-    parser.add_argument('--name', required=True, type=str, help='Experiment/model name')
-    
-    parser.add_argument('--supervised_loss_weight', required=False, default=100, type=float, help='Weight given to the supervised loss')
-    parser.add_argument('--pops_path', required=False, default='', type=str, help='Path containing the main data populations')
-    
-    parser.add_argument('--n_components', required=False, type=int, default=8, help='Number of components to use for the SVD initialization.')
-    
-    parser.add_argument('--num_gpus', required=False, default=0, type=int, help='Number of GPUs to be used in the execution.')
-    parser.add_argument('--num_cpus', required=False, default=1, type=int, help='Number of CPUs to be used in the execution.')
-    
-    #parser.add_argument('--cv', required=False, default=None, type=int, help='Number of folds for cross-validation')
-    return parser.parse_args(argv)
-
-def parse_infer_args(argv: List[str]):
-    """Inference arguments parser
-    """
-    parser = configargparse.ArgumentParser(prog='neural-admixture infer',
-                                     description='Rapid population clustering with autoencoders - inference mode',
-                                     config_file_parser_class=configargparse.YAMLConfigFileParser)
-    parser.add_argument('--out_name', required=True, type=str, help='Name used to output files on inference mode.')
-    parser.add_argument('--save_dir', required=True, type=str, help='Load model from this directory.')
-    parser.add_argument('--data_path', required=True, type=str, help='Path containing the main data.')
-    parser.add_argument('--name', required=True, type=str, help='Trained experiment/model name.')
-    parser.add_argument('--batch_size', required=False, default=1000, type=int, help='Batch size.')
-    parser.add_argument('--seed', required=False, type=int, default=42, help='Seed')
-    
-    parser.add_argument('--num_cpus', required=False, default=1, type=int, help='Number of CPUs to be used in the execution.')
-    parser.add_argument('--num_gpus', required=False, default=0, type=int, help='Number of GPUs to be used in the execution.')
-    return parser.parse_args(argv)
 
 def read_data(tr_file: str, tr_pops_f: str=None) -> np.ndarray:
     """

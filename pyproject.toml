@@ -2,8 +2,8 @@
 requires = [
     "setuptools >= 45",
     "setuptools_scm[toml]>=6.2",
-    "Cython",
-    "numpy"
+    "Cython > 3.0.0",
+    "numpy > 2.0.0"
     ]
 build-backend = "setuptools.build_meta"
 

@@ -73,7 +73,7 @@ def RSVD(A_uint8, N, M, k=8, seed=42, oversampling=10, power_iterations=2):
 
     log.info("    4) SVD of B...")
     svd_start = time.time()
-    Ut, _, Vt = np.linalg.svd(B, full_matrices=False)
+    Ut, St, Vt = np.linalg.svd(B, full_matrices=False)
     log.info(f"       SVD time={time.time() - svd_start:.4f}s")
     
     Vt = svd_flip(Vt, Ut)

@@ -313,8 +313,9 @@ class NeuralAdmixture():
         if self.device.type == 'cuda':
             self.model = torch.compile(self.base_model)
         if self.num_gpus > 1 and torch.distributed.is_initialized():
-            self.model = torch.nn.parallel.DistributedDataParallel(self.base_model, device_ids=[self.device], 
-                                                                output_device=[self.device], find_unused_parameters=False)
+            local_rank = torch.distributed.get_rank()
+            self.model = torch.nn.parallel.DistributedDataParallel(self.base_model, device_ids=[local_rank], 
+                                                                output_device=[local_rank], find_unused_parameters=False)
             self.raw_model = self.model.module
         else:
             self.model = self.base_model
@@ -366,7 +367,7 @@ class NeuralAdmixture():
 
         #INFERENCE OF Q's:
         self.raw_model.return_func = self.raw_model._return_infer
-        batch_size_inference_Q = min(data.shape[0], 5000)
+        batch_size_inference_Q = min(data.shape[0], 1024)
         self.model.eval()
         Qs = [torch.tensor([], device=self.device) for _ in self.ks_list]
         with torch.inference_mode():
