@@ -44,19 +44,19 @@ To train a model from scratch, simply invoke the following commands from the roo
 For unsupervised Neural ADMIXTURE (single-head):
 
 ```console
-$ neural-admixture train --k K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH
+$ neural-admixture train --k K --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --threads X
 ````
 
 For unsupervised Neural ADMIXTURE (multi-head):
 
 ```console
-$ neural-admixture train --min_k K_MIN --max_k K_MAX --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH
+$ neural-admixture train --min_k K_MIN --max_k K_MAX --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --threads X
 ````
 
 For supervised Neural ADMIXTURE:
 
 ```console
-$ neural-admixture train --k K --pops_path POPS_PATH --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH # only single-head support at the moment
+$ neural-admixture train --k K --pops_path POPS_PATH --name RUN_NAME --data_path DATA_PATH --save_dir SAVE_PATH --threads X # only single-head support at the moment
 ```
 
 As an example, the following ADMIXTURE call
@@ -68,7 +68,7 @@ $ ./admixture snps_data.bed 8 -s 42
 would be mimicked in Neural ADMIXTURE by running
 
 ```console
-$ neural-admixture train --k 8 --data_path snps_data.bed --save_dir SAVE_PATH --init_file INIT_FILE --name snps_data --seed 42
+$ neural-admixture train --k 8 --data_path snps_data.bed --save_dir SAVE_PATH --init_file INIT_FILE --name snps_data --seed 42 --threads X
 ```
 
 with some parameters such as the decoder initialization or the save directories not having a direct equivalent.
