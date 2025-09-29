@@ -18,10 +18,9 @@ class SNPReader:
 
         Args:
             file (str): path to file.
-            master (bool): Wheter or not this process is the master for printing the output.
 
         Returns:
-            np.ndarray: averaged genotype Dask array of shape (n_samples, n_snps)
+            np.ndarray: genotype array of shape (n_samples, n_snps)
         """
         log.info("    Input format is BED.")
 
@@ -46,7 +45,14 @@ class SNPReader:
         return G
     
     def _read_pgen(self, file: str, master: bool) -> np.ndarray:
-        """Reader wrapper for PGEN files"""
+        """Reader wrapper for PGEN files
+
+        Args:
+            file (str): path to file.
+
+        Returns:
+            np.ndarray: genotype array of shape (n_samples, n_snps)
+        """
         log.info("    Input format is PGEN.")
         try:
             import pgenlib as pg
@@ -69,16 +75,16 @@ class SNPReader:
 
         Args:
             file (str): path to file.
-            master (bool): Wheter or not this process is the master for printing the output.
 
         Returns:
-            np.ndarray: averaged genotype array of shape (n_samples, n_snps)
+            np.ndarray: genotype array of shape (n_samples, n_snps)
         """
         log.info("    Input format is VCF.")
         import allel
-        f_tr = allel.read_vcf(file)
-        calldata = f_tr["calldata/GT"].astype(np.uint8)
-        return np.ascontiguousarray(np.sum(calldata, axis=2, dtype=np.uint8).T)
+        f_tr = allel.read_vcf(file, fields=["calldata/GT"], types={"calldata/GT": "i1"}, fills={"calldata/GT": -1})
+        G = np.ascontiguousarray(np.sum(f_tr["calldata/GT"], axis=2, dtype=np.int8).T)
+        G[G < 0] = 3
+        return G.astype(np.uint8)
         
     def read_data(self, file: str) -> np.ndarray:
         """Wrapper of readers
@@ -86,7 +92,7 @@ class SNPReader:
         Args:
             file (str): path to file
         Returns:
-            np.ndarray: averaged genotype numpy array of shape (n_samples, n_snps)
+            np.ndarray: genotype array of shape (n_samples, n_snps)
         """
         file_extensions = Path(file).suffixes
     
@@ -99,5 +105,6 @@ class SNPReader:
         else:
             log.error("    Invalid format. Unrecognized file format. Make sure file ends with .bed, .pgen or .vcf .")
             sys.exit(1)
+        
         assert int(G.min()) == 0 and int(G.max()) in (2, 3), "Only biallelic SNPs are supported. Please make sure multiallelic sites have been removed."
         return G if G.mean() < 1 else 2 - G
