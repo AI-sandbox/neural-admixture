@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
         data: torch.Tensor, device: torch.device, num_gpus: int, hidden_size: int, 
-        master: bool, V: np.ndarray, pops : np.ndarray, min_k: int=None, max_k: int=None, n_components: int=None) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
+        master: bool, V: np.ndarray, pops : np.ndarray, min_k: int=None, max_k: int=None, n_components: int=None, supervised_loss_weight: int=100) -> Tuple[torch.Tensor, torch.Tensor, torch.nn.Module]:
         """
         Initializes P and Q matrices and trains a neural admixture model using GMM.
 
@@ -128,7 +128,7 @@ def train(epochs: int, batch_size: int, learning_rate: float, K: int, seed: int,
             pack2bit = None
             packed_data = data
         
-        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, master, pack2bit, min_k, max_k)
+        model = NeuralAdmixture(K, epochs, batch_size, learning_rate, device, seed, num_gpus, master, pack2bit, min_k, max_k,supervised_loss_weight)
         Qs, Ps, model = model.launch_training(P_init, packed_data, hidden_size, V.shape[1], V, M, N, pops)
         
         if master:
