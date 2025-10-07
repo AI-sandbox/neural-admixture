@@ -32,8 +32,9 @@ def fit_model(args: argparse.Namespace, data: torch.Tensor, device: torch.device
         min_k = int(args.min_k)
         max_k = int(args.max_k)
         K = None
-
-    Ps, Qs, model = train(epochs, batch_size, learning_rate, K, seed, data, device, num_gpus, hidden_size, master, V, pops, min_k, max_k, n_components)
+    if args.supervised_loss_weight is None:
+        args.supervised_loss_weight = 100
+    Ps, Qs, model = train(epochs, batch_size, learning_rate, K, seed, data, device, num_gpus, hidden_size, master, V, pops, min_k, max_k, n_components, args.supervised_loss_weight)
     
     if master:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
